@@ -1,0 +1,330 @@
+<script>
+  window.BINOM_CLICKID = "{clickid}";
+  window.BINOM_PAGE_TYPE = "prelanding";
+</script>
+<script src="../include/events-stat.js"></script>
+
+<script>
+  (function () {
+    "use strict";
+
+    var CFG = {
+      FB_PIXEL: "<?php echo $pixel_fb; ?>",
+      CLICKID_MACRO: "{clickid}",
+      LANDING_COOKIE: "landing_start_time",
+      PH_COOKIE: "ph_distinct_id",
+      ANON_COOKIE: "anon_id",
+      P_TS: "tmsl",
+      P_CID: "tmsl_cid",
+      P_ACTIVE: "tmsla",
+      P_DWELL: "tmsld",
+      P_EID: "eid",
+      COOKIE_DAYS: 7,
+      PH_COOKIE_DAYS: 400,
+      ANON_DAYS: 400,
+      USE_HASH: true,
+      START_ON_INTERACTION: false,
+    };
+
+    var SECURE = location.protocol === "https:";
+
+    function setCookie(name, value, days) {
+      var s = name + "=" + encodeURIComponent(value) + "; path=/; SameSite=Lax";
+      if (days)
+        s += "; expires=" + new Date(Date.now() + days * 864e5).toUTCString();
+      if (SECURE) s += "; Secure";
+      document.cookie = s;
+    }
+
+    function getCookie(name) {
+      var m = document.cookie.match(
+        new RegExp(
+          "(?:^|; )" +
+            name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1") +
+            "=([^;]*)",
+        ),
+      );
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    function lsGet(k) {
+      try {
+        return localStorage.getItem(k);
+      } catch (e) {
+        return null;
+      }
+    }
+    function lsSet(k, v) {
+      try {
+        localStorage.setItem(k, v);
+      } catch (e) {}
+    }
+
+    function safe(fn) {
+      return function () {
+        try {
+          return fn.apply(this, arguments);
+        } catch (e) {
+          if (window.console) console.warn("[trk]", e);
+        }
+      };
+    }
+
+    function getClickId() {
+      var raw = CFG.CLICKID_MACRO;
+      if (raw && raw.indexOf("{") === -1 && raw.length > 3) return raw;
+      var q = new URLSearchParams(location.search);
+      return q.get("clickid") || q.get("cid") || q.get("subid") || "";
+    }
+
+    var CLICK_ID = getClickId();
+
+    function getExternalId() {
+      if (CLICK_ID) return CLICK_ID;
+      var id = getCookie(CFG.ANON_COOKIE) || lsGet(CFG.ANON_COOKIE);
+      if (!id) {
+        id =
+          "anon-" +
+          Date.now().toString(36) +
+          "-" +
+          Math.random().toString(36).slice(2, 10);
+        setCookie(CFG.ANON_COOKIE, id, CFG.ANON_DAYS);
+        lsSet(CFG.ANON_COOKIE, id);
+      }
+      return id;
+    }
+
+    var EXTERNAL_ID = getExternalId();
+
+    var IS_BOT =
+      navigator.webdriver === true ||
+      document.visibilityState === "prerender" ||
+      document.prerendering === true;
+
+    var startTs = null;
+
+    function readStored() {
+      var raw = getCookie(CFG.LANDING_COOKIE) || lsGet(CFG.LANDING_COOKIE);
+      if (!raw) return null;
+      try {
+        var o = JSON.parse(raw);
+        return o && o.ts ? o : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function writeStored(ts) {
+      var payload = JSON.stringify({ cid: CLICK_ID, ts: ts });
+      setCookie(CFG.LANDING_COOKIE, payload, CFG.COOKIE_DAYS);
+      lsSet(CFG.LANDING_COOKIE, payload);
+    }
+
+    function initTimestamp() {
+      var stored = readStored();
+      if (stored && stored.cid === CLICK_ID) {
+        startTs = stored.ts;
+      } else {
+        startTs = Date.now();
+        writeStored(startTs);
+      }
+      activeLastTick = Date.now();
+    }
+
+    var activeMs = 0;
+    var activeLastTick = Date.now();
+    var isVisible = !document.hidden;
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        if (isVisible) activeMs += Date.now() - activeLastTick;
+        isVisible = false;
+      } else {
+        activeLastTick = Date.now();
+        isVisible = true;
+      }
+    });
+
+    function activeSeconds() {
+      if (startTs === null) return 0;
+      var total = activeMs + (isVisible ? Date.now() - activeLastTick : 0);
+      return Math.max(0, Math.round(total / 1000));
+    }
+
+    function totalSeconds() {
+      if (startTs === null) return 0;
+      return Math.max(0, Math.round((Date.now() - startTs) / 1000));
+    }
+
+    function buildPayload() {
+      var p =
+        CFG.P_TS +
+        "=" +
+        startTs +
+        "&" +
+        CFG.P_ACTIVE +
+        "=" +
+        activeSeconds() +
+        "&" +
+        CFG.P_DWELL +
+        "=" +
+        totalSeconds();
+      if (CLICK_ID) p += "&" + CFG.P_CID + "=" + encodeURIComponent(CLICK_ID);
+      else p += "&" + CFG.P_EID + "=" + encodeURIComponent(EXTERNAL_ID);
+      return p;
+    }
+
+    function decorate(href) {
+      if (startTs === null) return href;
+      try {
+        var u = new URL(href, location.href);
+        if (u.protocol !== "http:" && u.protocol !== "https:") return href;
+
+        u.searchParams.set(CFG.P_TS, String(startTs));
+        u.searchParams.set(CFG.P_ACTIVE, String(activeSeconds()));
+        u.searchParams.set(CFG.P_DWELL, String(totalSeconds()));
+        if (CLICK_ID) u.searchParams.set(CFG.P_CID, CLICK_ID);
+        else u.searchParams.set(CFG.P_EID, EXTERNAL_ID);
+
+        if (CFG.USE_HASH) {
+          var h = u.hash ? u.hash.replace(/^#/, "") : "";
+          if (!h || h.indexOf(CFG.P_TS + "=") !== -1) u.hash = buildPayload();
+        }
+
+        return u.toString();
+      } catch (e) {
+        return href;
+      }
+    }
+
+    var decorateAll = safe(function () {
+      var links = document.querySelectorAll("a[href]");
+      for (var i = 0; i < links.length; i++)
+        links[i].href = decorate(links[i].href);
+    });
+
+    function syncPosthog() {
+      if (
+        typeof posthog === "undefined" ||
+        typeof posthog.get_distinct_id !== "function"
+      )
+        return false;
+      var id = posthog.get_distinct_id();
+      if (!id) return false;
+      setCookie(CFG.PH_COOKIE, id, CFG.PH_COOKIE_DAYS);
+      return true;
+    }
+
+    function startPosthogSync() {
+      if (syncPosthog()) return;
+      var n = 0;
+      var t = setInterval(function () {
+        if (syncPosthog() || ++n > 60) clearInterval(t);
+      }, 100);
+    }
+
+    function loadPixel() {
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod
+            ? n.callMethod.apply(n, arguments)
+            : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = "2.0";
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(
+        window,
+        document,
+        "script",
+        "https://connect.facebook.net/en_US/fbevents.js",
+      );
+
+      fbq("init", CFG.FB_PIXEL, CLICK_ID ? { external_id: CLICK_ID } : {});
+      fbq("track", "PageView", {}, { eventID: EXTERNAL_ID + "-PageView" });
+    }
+
+    var started = false;
+
+    var start = safe(function () {
+      if (started) return;
+      started = true;
+      initTimestamp();
+      decorateAll();
+      startPosthogSync();
+    });
+
+    var boot = safe(function () {
+      if (IS_BOT) return;
+
+      loadPixel();
+
+      if (CFG.START_ON_INTERACTION) {
+        ["pointerdown", "keydown", "scroll", "touchstart"].forEach(
+          function (ev) {
+            window.addEventListener(ev, start, { once: true, passive: true });
+          },
+        );
+        setTimeout(start, 15000);
+      } else {
+        start();
+      }
+
+      document.addEventListener(
+        "click",
+        function (e) {
+          var a = e.target && e.target.closest && e.target.closest("a[href]");
+          if (a) {
+            start();
+            a.href = decorate(a.href);
+          }
+        },
+        true,
+      );
+
+      var _open = window.open;
+      window.open = function (url) {
+        start();
+        arguments[0] = decorate(url);
+        return _open.apply(window, arguments);
+      };
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", decorateAll);
+      }
+      window.addEventListener("load", function () {
+        decorateAll();
+        syncPosthog();
+      });
+    });
+
+    boot();
+
+    window.TRK = {
+      decorate: decorate,
+      clickId: CLICK_ID,
+      externalId: EXTERNAL_ID,
+      startTs: function () {
+        return startTs;
+      },
+      activeSeconds: activeSeconds,
+    };
+  })();
+</script>
+
+<noscript>
+  <img
+    style="display: none"
+    src="https://www.facebook.com/tr?id=<?php echo $pixel_fb; ?>&ev=PageView&noscript=1&eid={clickid}-PageView"
+    width="1"
+    height="1"
+  />
+</noscript>
