@@ -3,14 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findCssFile, resolveJob } from "./lib.js";
 
-const MARK = "prep-img-ratio";
-const RULE = `/* ${MARK} */
-img,
+const RULE = `img,
 video {
   max-width: 100%;
   height: auto;
 }
 `;
+const HAS_RULE =
+  /(?:img\s*,\s*video|video\s*,\s*img)\s*\{[^}]*(?:max-width\s*:\s*100%[^}]*height\s*:\s*auto|height\s*:\s*auto[^}]*max-width\s*:\s*100%)/s;
 
 export function ensureImgRatio(landingDir, cssFile) {
   const cssPath = findCssFile(landingDir, cssFile);
@@ -20,17 +20,12 @@ export function ensureImgRatio(landingDir, cssFile) {
   }
 
   const css = fs.readFileSync(cssPath, "utf8");
-  if (css.includes(MARK) && /\/\* prep-img-ratio \*\/\s*img,\s*video\s*\{/s.test(css)) {
+  if (HAS_RULE.test(css)) {
     console.log("Img ratio: kept");
     return;
   }
 
-  const replaced = css.replace(
-    /\/\* prep-img-ratio \*\/\s*img\s*\{[\s\S]*?\}\s*/m,
-    RULE,
-  );
-  const next = replaced === css ? `${css.trimEnd()}\n\n${RULE}` : replaced;
-  fs.writeFileSync(cssPath, next);
+  fs.writeFileSync(cssPath, `${css.trimEnd()}\n\n${RULE}`);
   console.log("Img ratio: added height auto");
 }
 

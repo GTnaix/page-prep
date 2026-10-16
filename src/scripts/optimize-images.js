@@ -5,8 +5,56 @@ import sharp from "sharp";
 import { ROOT, fail, findCssFile, resolveJob, uniqueDest, walkFiles } from "./lib.js";
 
 const CONVERT_EXT = new Set([".jpg", ".jpeg", ".png", ".gif"]);
+const CHECK_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"]);
 const MAX_EDGE = 1440;
 const QUALITY = 82;
+
+function resolveSrc(fromDir, src) {
+  const raw = (src || "").trim().split("?")[0];
+  if (
+    !raw ||
+    /^https?:/i.test(raw) ||
+    raw.startsWith("//") ||
+    /^data:/i.test(raw) ||
+    raw.startsWith("{")
+  ) {
+    return null;
+  }
+  return path.resolve(fromDir, raw);
+}
+
+async function isBrokenRaster(file) {
+  if (fs.statSync(file).size === 0) return true;
+  try {
+    const meta = await sharp(file).metadata();
+    return !meta.width || !meta.height;
+  } catch {
+    return true;
+  }
+}
+
+function stripDroppedImgs(html, fromDir, dropped) {
+  return html.replace(/<img\b[^>]*>/gi, (tag) => {
+    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+    if (!src) return tag;
+    const file = resolveSrc(fromDir, src[1]);
+    return file && dropped.has(file) ? "" : tag;
+  });
+}
+
+async function dropBrokenRasters(landingDir, entry, html) {
+  const fromDir = path.dirname(entry);
+  const dropped = new Set();
+  for (const file of walkFiles(landingDir)) {
+    if (!CHECK_EXT.has(path.extname(file).toLowerCase())) continue;
+    if (!(await isBrokenRaster(file))) continue;
+    dropped.add(path.resolve(file));
+    fs.unlinkSync(file);
+    console.log(`Broken image dropped: ${path.relative(ROOT, file)}`);
+  }
+  if (!dropped.size) return html;
+  return stripDroppedImgs(html, fromDir, dropped);
+}
 
 function collectImgCaps(html) {
   const caps = new Map();
@@ -75,18 +123,21 @@ async function convertFile(file, attrCap) {
 }
 
 export async function optimizeImages(landingDir, entry) {
-  const html = fs.readFileSync(entry, "utf8");
-  const caps = collectImgCaps(html);
+  let htmlOut = await dropBrokenRasters(
+    landingDir,
+    entry,
+    fs.readFileSync(entry, "utf8"),
+  );
+  const caps = collectImgCaps(htmlOut);
   const files = walkFiles(landingDir).filter((file) =>
     CONVERT_EXT.has(path.extname(file).toLowerCase()),
   );
 
   if (files.length === 0) {
+    fs.writeFileSync(entry, htmlOut);
     console.log("No raster images to convert");
     return;
   }
-
-  let htmlOut = html;
   const cssFile = findCssFile(landingDir);
   let cssOut = cssFile ? fs.readFileSync(cssFile, "utf8") : null;
   let converted = 0;

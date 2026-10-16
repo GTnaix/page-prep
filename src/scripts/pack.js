@@ -27,7 +27,7 @@ function renameToPhp(entry) {
   return dest;
 }
 
-export function packLanding(landingDir, entry) {
+export async function packLanding(landingDir, entry) {
   assertInsideWork(landingDir);
   removeBackups(landingDir);
   const phpFile = renameToPhp(entry);
@@ -36,7 +36,7 @@ export function packLanding(landingDir, entry) {
 
   const zipPath = `${landingDir}.zip`;
   if (fs.existsSync(zipPath)) fs.rmSync(zipPath, { force: true });
-  writeZip(zipPath, collectZipFiles(phpFile, assetsDir));
+  await writeZip(zipPath, collectZipFiles(phpFile, assetsDir));
   console.log(`Zip: ${path.relative(ROOT, zipPath)}`);
 }
 
@@ -45,5 +45,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.argv.slice(2),
     "Usage: npm run pack -- work/<folder>",
   );
-  packLanding(landingDir, entry);
+  packLanding(landingDir, entry).catch((error) => fail(error.message || error));
 }

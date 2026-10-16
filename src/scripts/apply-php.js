@@ -9,8 +9,10 @@ const SNIPPETS = path.join(
   "snippets",
   "landing",
 );
-const HEAD_START = "<!-- landing-head -->";
-const HEAD_END = "<!-- /landing-head -->";
+const HEAD_START = "<!-- analytics -->";
+const HEAD_END = "<!-- /analytics -->";
+const HEAD_BLOCK = /<!--\s*\/?analytics\s*-->[\s\S]*?<!--\s*\/analytics\s*-->/g;
+const HEAD_MARK = /<!--\s*\/?analytics\s*-->/g;
 
 function readSnippet(name) {
   return fs.readFileSync(path.join(SNIPPETS, name), "utf8").trim();
@@ -27,10 +29,7 @@ function stripScripts(html, shouldDrop) {
 }
 
 function stripSpyAndOldAnalytics(html) {
-  let next = html.replace(
-    new RegExp(`${HEAD_START}[\\s\\S]*?${HEAD_END}`, "g"),
-    "",
-  );
+  let next = html.replace(HEAD_BLOCK, "").replace(HEAD_MARK, "");
 
   next = stripScripts(next, (tag) => {
     if (/window\.BINOM_CLICKID|window\.TRK|CLICKID_MACRO/i.test(tag)) return true;

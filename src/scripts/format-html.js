@@ -2,8 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
-import { fail, resolveJob } from "./lib.js";
+import { fail, findCssFile, resolveJob } from "./lib.js";
 import { formatCss } from "./format-css.js";
+import { purgeCss } from "./purge-css.js";
 
 function compactSvg(svg) {
   return svg
@@ -68,7 +69,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.argv.slice(2),
     "Usage: node src/scripts/format-html.js work/<folder>",
   );
-  formatHtml(entry)
+  const cssPath = findCssFile(landingDir, cssFile);
+  Promise.resolve()
+    .then(() => (cssPath ? purgeCss(entry, cssPath) : undefined))
     .then(() => formatCss(landingDir, cssFile))
+    .then(() => formatHtml(entry))
     .catch((error) => fail(error.message || error));
 }

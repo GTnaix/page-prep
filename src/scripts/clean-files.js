@@ -168,12 +168,30 @@ function removeEmptyDirs(dir, landingDir, assetsDir) {
   if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
 }
 
+function tryRemove(file) {
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      fs.chmodSync(file, 0o666);
+    } catch {
+      // still try rm
+    }
+    try {
+      fs.rmSync(file, { force: true });
+      return true;
+    } catch {
+      if (i === 2) return false;
+    }
+  }
+  return false;
+}
+
 export function cleanFiles(landingDir, entry) {
   assertInsideWork(landingDir);
 
   const assetsDir = path.join(landingDir, "assets");
   const referenced = collectReferencedFiles(landingDir, entry);
   const removed = [];
+  const skipped = [];
 
   for (const file of walkFiles(landingDir)) {
     const full = path.resolve(file);
@@ -181,19 +199,25 @@ export function cleanFiles(landingDir, entry) {
     if (alwaysKeep(landingDir, full)) continue;
     if (isIconFile(full)) continue;
     if (path.basename(full).toLowerCase().endsWith(".bak")) continue;
-    fs.rmSync(full, { force: true });
-    removed.push(posix(path.relative(landingDir, full)));
+    const rel = posix(path.relative(landingDir, full));
+    if (tryRemove(full)) removed.push(rel);
+    else skipped.push(rel);
   }
 
   removeEmptyDirs(landingDir, landingDir, assetsDir);
 
-  if (removed.length === 0) {
+  if (removed.length === 0 && skipped.length === 0) {
     console.log("No leftover files");
     return;
   }
-  const preview = removed.slice(0, 20).join(", ");
-  const extra = removed.length > 20 ? ` … +${removed.length - 20}` : "";
-  console.log(`Removed ${removed.length} leftover: ${preview}${extra}`);
+  if (removed.length) {
+    const preview = removed.slice(0, 20).join(", ");
+    const extra = removed.length > 20 ? ` … +${removed.length - 20}` : "";
+    console.log(`Removed ${removed.length} leftover: ${preview}${extra}`);
+  }
+  if (skipped.length) {
+    console.log(`Kept locked leftover: ${skipped.join(", ")}`);
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

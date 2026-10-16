@@ -31,7 +31,7 @@ function strip(html, re) {
 function stripHtmlComments(html) {
   let count = 0;
   const next = html.replace(/<!--[\s\S]*?-->/g, (comment) => {
-    if (/<!--\s*\/?landing-head\s*-->/.test(comment)) return comment;
+    if (/<!--\s*\/?analytics\s*-->/.test(comment)) return comment;
     count += 1;
     return "";
   });
@@ -49,7 +49,8 @@ function stripTrackerImgs(html) {
 }
 
 function stripEmptyStyles(html) {
-  const re = /\s+style\s*=\s*(["'])\s*\1/gi;
+  const re =
+    /\s+style\s*=\s*(["'])(?:\s*|filter\s*:\s*hue-rotate\s*\([^)]*\)\s*;?)\1/gi;
   const matches = html.match(re);
   return {
     html: html.replace(re, ""),

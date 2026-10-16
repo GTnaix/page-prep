@@ -46,10 +46,10 @@ function hrefFor(landingDir, file) {
 }
 
 function injectLink(html, tag) {
-  if (/<!-- landing-head -->/.test(html)) {
+  if (/<!-- analytics -->/.test(html)) {
     return html.replace(
-      /<!-- landing-head -->/,
-      `  ${tag}\n    <!-- landing-head -->`,
+      /<!-- analytics -->/,
+      `  ${tag}\n    <!-- analytics -->`,
     );
   }
   if (/<\/head>/i.test(html)) {
