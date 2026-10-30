@@ -9,6 +9,8 @@ const CHECK_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".
 const MAX_EDGE = 1440;
 const QUALITY = 82;
 
+const DENSITY_NAME = /(?:@|[-_])[1-9](?:\.\d+)?x(?=\.[^.]+$)/i;
+
 function resolveSrc(fromDir, src) {
   const raw = (src || "").trim().split("?")[0];
   if (
@@ -33,27 +35,141 @@ async function isBrokenRaster(file) {
   }
 }
 
-function stripDroppedImgs(html, fromDir, dropped) {
-  return html.replace(/<img\b[^>]*>/gi, (tag) => {
-    const src = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
-    if (!src) return tag;
-    const file = resolveSrc(fromDir, src[1]);
-    return file && dropped.has(file) ? "" : tag;
-  });
+function findFile(htmlDir, pageDir, url) {
+  const abs = resolveSrc(htmlDir, url);
+  if (abs && fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
+  const base = path.basename(String(url || "").split("?")[0]);
+  if (!base) return null;
+  for (const file of walkFiles(pageDir)) {
+    if (path.basename(file) === base && fs.statSync(file).isFile()) return file;
+  }
+  return null;
+}
+
+function srcsetParts(value) {
+  return value
+    .split(",")
+    .map((part) => {
+      const bits = part.trim().split(/\s+/).filter(Boolean);
+      if (!bits.length) return null;
+      return { url: bits[0], desc: (bits[1] || "1x").toLowerCase() };
+    })
+    .filter(Boolean);
+}
+
+function hrefFor(htmlDir, file) {
+  const rel = path.relative(htmlDir, file).replaceAll("\\", "/");
+  return rel.startsWith(".") ? rel : `./${rel}`;
+}
+
+function densitySiblings(url, htmlDir, pageDir) {
+  const base = path.basename(String(url || "").split("?")[0]);
+  const ext = path.extname(base);
+  const stem = path.basename(base, ext);
+  if (!stem || DENSITY_NAME.test(base)) return [];
+  const names = [`${stem}@2x${ext}`, `${stem}@3x${ext}`, `${stem}-2x${ext}`, `${stem}_2x${ext}`];
+  const found = [];
+  for (const name of names) {
+    const file = findFile(htmlDir, pageDir, name);
+    if (file) found.push(file);
+  }
+  return found;
+}
+
+async function chooseImage(src, srcsetValue, htmlDir, pageDir) {
+  const srcFile = src ? findFile(htmlDir, pageDir, src) : null;
+  if (srcFile && !(await isBrokenRaster(srcFile))) {
+    return { href: src, file: srcFile, drop: null, swapped: false };
+  }
+
+  const candidates = [];
+  for (const part of srcsetParts(srcsetValue || "")) {
+    if (part.desc === "1x") continue;
+    const file = findFile(htmlDir, pageDir, part.url);
+    if (file) candidates.push(file);
+  }
+  candidates.push(...densitySiblings(src, htmlDir, pageDir));
+
+  const seen = new Set();
+  for (const file of candidates) {
+    const abs = path.resolve(file);
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    if (await isBrokenRaster(file)) continue;
+    return {
+      href: hrefFor(htmlDir, file),
+      file,
+      drop: srcFile && path.resolve(srcFile) !== abs ? srcFile : null,
+      swapped: true,
+    };
+  }
+
+  return { href: src, file: srcFile, drop: null, swapped: false };
+}
+
+async function collapseSrcset(html, htmlDir, pageDir) {
+  const kept = new Set();
+  const drops = [];
+  let removed = 0;
+  let swapped = 0;
+  const matches = [...html.matchAll(/<img\b[^>]*>/gi)];
+  let next = html;
+  for (const match of matches.reverse()) {
+    const tag = match[0];
+    const srcset = tag.match(/\ssrcset\s*=\s*(["'])([\s\S]*?)\1/i);
+    const srcMatch = tag.match(/\ssrc\s*=\s*(["'])([\s\S]*?)\1/i);
+    const src = srcMatch ? srcMatch[2].trim() : "";
+    if (srcset) removed += 1;
+    const choice = await chooseImage(src, srcset?.[2] || "", htmlDir, pageDir);
+    if (choice.file) kept.add(path.resolve(choice.file));
+    if (choice.drop) drops.push(path.resolve(choice.drop));
+    if (choice.swapped) swapped += 1;
+    let out = tag;
+    if (choice.href && choice.href !== src) {
+      if (srcMatch) out = out.replace(srcMatch[0], ` src="${choice.href}"`);
+      else out = out.replace(/<img\b/i, `<img src="${choice.href}"`);
+    }
+    out = out.replace(/\s(?:srcset|sizes)\s*=\s*(["'])[\s\S]*?\1/gi, "");
+    next = next.slice(0, match.index) + out + next.slice(match.index + tag.length);
+  }
+  next = next.replace(/<source\b[^>]*\bsrcset\b[^>]*>/gi, "");
+  return { html: next, removed, swapped, kept, drops };
+}
+
+function dropDensityFiles(pageDir, kept) {
+  let dropped = 0;
+  for (const file of walkFiles(pageDir)) {
+    if (!DENSITY_NAME.test(path.basename(file))) continue;
+    if (kept.has(path.resolve(file))) continue;
+    fs.unlinkSync(file);
+    dropped += 1;
+  }
+  return dropped;
+}
+
+function referencedFiles(html, fromDir) {
+  const refs = new Set();
+  for (const match of html.matchAll(/\bsrc\s*=\s*["']([^"']+)["']/gi)) {
+    const file = resolveSrc(fromDir, match[1]);
+    if (file) refs.add(path.resolve(file));
+  }
+  return refs;
 }
 
 async function dropBrokenRasters(pageDir, entry, html) {
-  const fromDir = path.dirname(entry);
-  const dropped = new Set();
+  const refs = referencedFiles(html, path.dirname(entry));
   for (const file of walkFiles(pageDir)) {
     if (!CHECK_EXT.has(path.extname(file).toLowerCase())) continue;
     if (!(await isBrokenRaster(file))) continue;
-    dropped.add(path.resolve(file));
+    const abs = path.resolve(file);
+    if (refs.has(abs) && fs.statSync(file).size > 0) {
+      console.log(`Image kept, could not read: ${path.relative(ROOT, file)}`);
+      continue;
+    }
     fs.unlinkSync(file);
     console.log(`Broken image dropped: ${path.relative(ROOT, file)}`);
   }
-  if (!dropped.size) return html;
-  return stripDroppedImgs(html, fromDir, dropped);
+  return html;
 }
 
 function collectImgCaps(html) {
@@ -123,11 +239,21 @@ async function convertFile(file, attrCap) {
 }
 
 export async function optimizeImages(pageDir, entry) {
-  let htmlOut = await dropBrokenRasters(
-    pageDir,
-    entry,
-    fs.readFileSync(entry, "utf8"),
-  );
+  const htmlDir = path.dirname(entry);
+  const collapsed = await collapseSrcset(fs.readFileSync(entry, "utf8"), htmlDir, pageDir);
+  let replaced = 0;
+  for (const file of collapsed.drops) {
+    if (collapsed.kept.has(file) || !fs.existsSync(file)) continue;
+    fs.unlinkSync(file);
+    replaced += 1;
+  }
+  const density = dropDensityFiles(pageDir, collapsed.kept);
+  if (collapsed.removed || collapsed.swapped || density) {
+    console.log(
+      `Srcset removed: ${collapsed.removed}, replaced with density: ${collapsed.swapped}, broken files deleted: ${replaced}, density files deleted: ${density}`,
+    );
+  }
+  let htmlOut = await dropBrokenRasters(pageDir, entry, collapsed.html);
   const caps = collectImgCaps(htmlOut);
   const files = walkFiles(pageDir).filter((file) =>
     CONVERT_EXT.has(path.extname(file).toLowerCase()),
