@@ -23,7 +23,7 @@ import { disableForeignFormFile, normalizeFormFile } from "../steps/offer/form.j
 
 let { pageDir, entry, cssFile, google, offer } = resolveJob(
   process.argv.slice(2),
-  "Usage: npm run prep -- work/<folder> --landing [--google] | --offer",
+  "Usage: npm run prep -- work/<folder> --landing [--google] | --offer [--google]",
   { requirePage: true },
 );
 
@@ -45,7 +45,7 @@ await formatCss(pageDir, cssFile);
 cleanHtml(entry);
 imageAttrs(entry);
 if (offer) {
-  applyOffer(entry);
+  applyOffer(entry, google);
   ensureOfferApp(pageDir, entry);
 }
 else {
@@ -53,6 +53,6 @@ else {
   ensureApp(pageDir, entry);
 }
 await formatHtml(entry);
-if (offer) normalizeFormFile(entry);
+if (offer) normalizeFormFile(entry, google);
 else disableForeignFormFile(entry);
 backupHtml(entry);

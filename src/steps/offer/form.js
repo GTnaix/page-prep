@@ -29,6 +29,7 @@ const HIDDEN_NAMES = new Set([
   "dial_code",
   "funnel",
   "ip",
+  "gtag",
 ]);
 const NAMED_FIELDS = new Set(["first_name", "last_name", "sendingmail"]);
 const SPANS = `<span id="valid-msg" style="color: green; font-weight: 600;" class="hide">✓ valid</span>
@@ -329,7 +330,16 @@ function rewriteOpen(open, indent) {
   return `<form\n${keys.map((key) => `${pad}${key}="${attrs.get(key)}"`).join("\n")}\n${indent}>`;
 }
 
-function normalizeForm(form, indent) {
+function fieldsBlock(google) {
+  if (!google) return FIELDS;
+  const gtag = '<input type="hidden" name="gtag" value="<?php echo $gtmCodeSafe; ?>" />';
+  return FIELDS.replace(
+    '<input type="text" name="email"',
+    `${gtag}\n<input type="text" name="email"`,
+  );
+}
+
+function normalizeForm(form, indent, google) {
   const open = form.match(/^<form\b[^>]*>/i)?.[0] ?? "<form>";
   const pad = `${indent}  `;
   let body = stripHidden(form.slice(open.length));
@@ -337,7 +347,7 @@ function normalizeForm(form, indent) {
   body = unwrapIti(body);
   body = body.replace(INPUT_RE, cleanControl);
   body = dropEmptyDivs(stripSpans(body)).replace(/^(?:[ \t]*\r?\n)+/, "").replace(/\n+$/, "");
-  const fields = FIELDS.split("\n").map((line) => pad + line).join("\n");
+  const fields = fieldsBlock(google).split("\n").map((line) => pad + line).join("\n");
   const spans = SPANS.split("\n").map((line) => pad + line).join("\n");
   const next = `${rewriteOpen(open, indent)}\n${fields}\n\n${body}`;
   return ensureSubmit(insertSpans(next, spans));
@@ -353,7 +363,7 @@ export function disableForeignFormFile(entry) {
   if (next !== html) fs.writeFileSync(entry, next);
 }
 
-export function normalizeForms(html) {
+export function normalizeForms(html, google = false) {
   const forms = [...html.matchAll(FORM_RE)].map((match) => match[0]);
   const targets = new Set(forms.filter(isLeadForm));
   let count = 0;
@@ -364,14 +374,14 @@ export function normalizeForms(html) {
     count += 1;
     const lineStart = html.lastIndexOf("\n", offset) + 1;
     const indent = html.slice(lineStart, offset).match(/^[ \t]*/)?.[0] ?? "";
-    return normalizeForm(form, indent);
+    return normalizeForm(form, indent, google);
   });
   return { html: next, count };
 }
 
-export function normalizeFormFile(entry) {
+export function normalizeFormFile(entry, google = false) {
   const html = fs.readFileSync(entry, "utf8");
-  const forms = normalizeForms(html);
+  const forms = normalizeForms(html, google);
   if (forms.html !== html) fs.writeFileSync(entry, forms.html);
   return forms.count;
 }

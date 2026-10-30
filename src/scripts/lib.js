@@ -70,7 +70,6 @@ function parseArgs(argv, usage, options = {}) {
       if (flag !== "landing" && flag !== "offer" && flag !== "google") fail(usage);
     }
     if (landing === offer) fail(usage);
-    if (offer && flags.has("google")) fail("Offer Google snippets are not ready");
   }
   return { target, google: flags.has("google"), landing, offer };
 }

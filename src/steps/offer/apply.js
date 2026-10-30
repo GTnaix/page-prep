@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { fail, resolveJob } from "../../scripts/lib.js";
+import { resolveJob } from "../../scripts/lib.js";
 import { normalizeForms } from "./form.js";
 
 const SNIPPETS = path.join(
@@ -88,27 +88,27 @@ function injectBody(html, libs) {
   return `${html}\n${libs}\n`;
 }
 
-export function apply(entry) {
+export function apply(entry, google = false) {
   let html = fs.readFileSync(entry, "utf8");
   html = stripLeadingPhp(html);
-  html = `${readSnippet("boot.php")}\n\n${html.replace(/^\s+/, "")}`;
+  const suffix = google ? "-google" : "";
+  html = `${readSnippet(`boot${suffix}.php`)}\n\n${html.replace(/^\s+/, "")}`;
   html = stripAnalytics(html);
-  html = injectHead(html, readSnippet("head.html"));
+  html = injectHead(html, readSnippet(`head${suffix}.html`));
   html = stripFormLibs(html);
   html = injectBody(html, readSnippet("form.html"));
-  const forms = normalizeForms(html);
+  const forms = normalizeForms(html, google);
   html = forms.html;
   fs.writeFileSync(entry, html);
   console.log(
-    `PHP: offer bootstrap, analytics, form libs replaced, form ${forms.count ? "normalized" : "none"}`,
+    `PHP: offer bootstrap, analytics, form libs replaced (${google ? "google" : "facebook"}), form ${forms.count ? "normalized" : "none"}`,
   );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.includes("--google")) fail("Offer Google snippets are not ready");
-  const { entry } = resolveJob(
+  const { entry, google } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/steps/offer/apply.js work/<folder>",
+    "Usage: node src/steps/offer/apply.js work/<folder> [--google]",
   );
-  apply(entry);
+  apply(entry, google);
 }
