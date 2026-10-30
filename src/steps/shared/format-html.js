@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
-import { fail, findCssFile, resolveJob } from "./lib.js";
+import { fail, findCssFile, resolveJob } from "../../scripts/lib.js";
+import { compactOfferLines } from "../offer/form.js";
 import { formatCss } from "./format-css.js";
 import { purgeCss } from "./purge-css.js";
 
@@ -32,6 +33,10 @@ function putPhp(html, blocks) {
   return next.replace(/(\?>)[ \t]*\r?\n*(?=<(?:!DOCTYPE|html)\b)/i, "$1\n\n");
 }
 
+function spaceBeforeAnalytics(html) {
+  return html.replace(/([^\n])\r?\n([ \t]*<!-- analytics -->)/g, "$1\n\n$2");
+}
+
 function pullSvgs(html) {
   const svgs = [];
   const next = html.replace(/<svg\b[\s\S]*?<\/svg>/gi, (svg) => {
@@ -57,7 +62,10 @@ export async function formatHtml(entry) {
       bracketSameLine: false,
       htmlWhitespaceSensitivity: "ignore",
     });
-    fs.writeFileSync(entry, putPhp(putSvgs(formatted, svgs), php.blocks));
+    const htmlOut = spaceBeforeAnalytics(
+      compactOfferLines(putPhp(putSvgs(formatted, svgs), php.blocks)),
+    );
+    fs.writeFileSync(entry, htmlOut);
     console.log("Formatted HTML");
   } catch {
     console.log("Format skipped: invalid HTML");
@@ -65,14 +73,14 @@ export async function formatHtml(entry) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, entry, cssFile } = resolveJob(
+  const { pageDir, entry, cssFile } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/format-html.js work/<folder>",
+    "Usage: node src/steps/shared/format-html.js work/<folder>",
   );
-  const cssPath = findCssFile(landingDir, cssFile);
+  const cssPath = findCssFile(pageDir, cssFile);
   Promise.resolve()
     .then(() => (cssPath ? purgeCss(entry, cssPath) : undefined))
-    .then(() => formatCss(landingDir, cssFile))
+    .then(() => formatCss(pageDir, cssFile))
     .then(() => formatHtml(entry))
     .catch((error) => fail(error.message || error));
 }

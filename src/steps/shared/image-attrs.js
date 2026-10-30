@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveJob } from "./lib.js";
+import { resolveJob } from "../../scripts/lib.js";
 
 const RASTER_EXT = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif", ".bmp"]);
 const IMG_RE = /<img\b[^>]*>/gi;
@@ -77,7 +77,7 @@ export function imageAttrs(entry) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/image-attrs.js work/<folder>",
+    "Usage: node src/steps/shared/image-attrs.js work/<folder>",
   );
   imageAttrs(entry);
 }

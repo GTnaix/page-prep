@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findCssFile, resolveJob } from "./lib.js";
+import { findCssFile, resolveJob } from "../../scripts/lib.js";
 
 const IMG_RE = /<img\b[^>]*>/gi;
 const CSP_RE = /<meta\b[^>]*\bhttp-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/gi;
@@ -110,9 +110,9 @@ const KEEP_EMPTY = new Set([
   "itemscope",
 ]);
 
-function cssAttrNames(landingDir) {
+function cssAttrNames(pageDir) {
   const names = new Set();
-  const cssPath = findCssFile(landingDir);
+  const cssPath = findCssFile(pageDir);
   if (!cssPath) return names;
   const css = fs.readFileSync(cssPath, "utf8");
   for (const match of css.matchAll(/\[\s*([a-zA-Z_:][\w:.-]*)/g)) {
@@ -183,7 +183,7 @@ export function cleanHtml(entry) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/clean-html.js work/<folder>",
+    "Usage: node src/steps/shared/clean-html.js work/<folder>",
   );
   cleanHtml(entry);
 }

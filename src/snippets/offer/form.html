@@ -1,0 +1,28 @@
+<style>
+  input.error-input {
+    border: 2px solid red !important;
+  }
+
+  .hide {
+    display: none;
+  }
+</style>
+
+<script>
+  const countryCode = document.querySelector('input[name="country"]').value;
+</script>
+<link rel="stylesheet" href="/../../landers/include/intl-tel-input/build/css/intlTelInput.css">
+<script src="/../../landers/include/intl-tel-input/build/js/intlTelInput.min.js"></script>
+<link rel="stylesheet" href="/../../landers/include/working-pro/form/loader.holder.css">
+<link rel="stylesheet" href="/../../landers/include/working-pro/form/form.css">
+<script src="/../../landers/include/working-pro/form/form.prod.js"></script>
+
+<script>
+  var fbp = getCookie("_fbp") || "";
+  var fbc = getCookie("_fbc") || "";
+  var combined = fbp + "%7C" + fbc;
+  var f = document.getElementsByName("fbp");
+  for (var i = 0; i < f.length; i++) {
+    f[i].value = combined;
+  }
+</script>

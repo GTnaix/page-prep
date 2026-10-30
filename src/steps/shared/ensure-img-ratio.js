@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findCssFile, resolveJob } from "./lib.js";
+import { findCssFile, resolveJob } from "../../scripts/lib.js";
 
 const RULE = `img,
 video {
@@ -12,8 +12,8 @@ video {
 const HAS_RULE =
   /(?:img\s*,\s*video|video\s*,\s*img)\s*\{[^}]*(?:max-width\s*:\s*100%[^}]*height\s*:\s*auto|height\s*:\s*auto[^}]*max-width\s*:\s*100%)/s;
 
-export function ensureImgRatio(landingDir, cssFile) {
-  const cssPath = findCssFile(landingDir, cssFile);
+export function ensureImgRatio(pageDir, cssFile) {
+  const cssPath = findCssFile(pageDir, cssFile);
   if (!cssPath) {
     console.log("Img ratio: no style.css");
     return;
@@ -33,9 +33,9 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const { landingDir, cssFile } = resolveJob(
+  const { pageDir, cssFile } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/ensure-img-ratio.js work/<folder>",
+    "Usage: node src/steps/shared/ensure-img-ratio.js work/<folder>",
   );
-  ensureImgRatio(landingDir, cssFile);
+  ensureImgRatio(pageDir, cssFile);
 }

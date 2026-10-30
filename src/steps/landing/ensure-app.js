@@ -1,18 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveJob } from "./lib.js";
+import { resolveJob } from "../../scripts/lib.js";
 
 const SNIPPET = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
+  "..",
   "..",
   "snippets",
   "landing",
   "app.js",
 );
 
-function ensureAppFile(landingDir) {
-  const dest = path.join(landingDir, "assets", "js", "app.js");
+function ensureAppFile(pageDir) {
+  const dest = path.join(pageDir, "assets", "js", "app.js");
   const snippet = fs.readFileSync(SNIPPET, "utf8");
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   if (!fs.existsSync(dest)) {
@@ -36,8 +37,8 @@ function ensureScriptTag(html) {
   return `${html}\n${tag}\n`;
 }
 
-export function ensureApp(landingDir, entry) {
-  const file = ensureAppFile(landingDir);
+export function ensureApp(pageDir, entry) {
+  const file = ensureAppFile(pageDir);
   let html = fs.readFileSync(entry, "utf8");
   const before = html;
   html = ensureScriptTag(html);
@@ -49,9 +50,9 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/ensure-app.js work/<folder>",
+    "Usage: node src/steps/landing/ensure-app.js work/<folder>",
   );
-  ensureApp(landingDir, entry);
+  ensureApp(pageDir, entry);
 }

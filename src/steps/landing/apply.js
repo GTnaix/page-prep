@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveJob } from "./lib.js";
+import { resolveJob } from "../../scripts/lib.js";
 
 const SNIPPETS = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
+  "..",
   "..",
   "snippets",
   "landing",
@@ -58,7 +59,7 @@ function injectHead(html, analytics) {
   return `${html}\n${block}\n`;
 }
 
-export function applyPhp(entry, google = false) {
+export function apply(entry, google = false) {
   let html = fs.readFileSync(entry, "utf8");
   html = stripLeadingPhp(html);
 
@@ -80,7 +81,7 @@ if (
 ) {
   const { entry, google } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/apply-php.js work/<folder> [--google]",
+    "Usage: node src/steps/landing/apply.js work/<folder> [--google]",
   );
-  applyPhp(entry, google);
+  apply(entry, google);
 }

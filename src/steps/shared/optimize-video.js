@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { resolveJob, walkFiles } from "./lib.js";
+import { resolveJob, walkFiles } from "../../scripts/lib.js";
 
 const require = createRequire(import.meta.url);
 const ffmpegPath = require("ffmpeg-static");
@@ -105,8 +105,8 @@ function compressFile(file) {
   return { originalSize, nextSize };
 }
 
-export function optimizeVideo(landingDir) {
-  const files = walkFiles(landingDir).filter((file) =>
+export function optimizeVideo(pageDir) {
+  const files = walkFiles(pageDir).filter((file) =>
     VIDEO_EXT.has(path.extname(file).toLowerCase()),
   );
 
@@ -158,9 +158,9 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const { landingDir } = resolveJob(
+  const { pageDir } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/optimize-video.js work/<folder>",
+    "Usage: node src/steps/shared/optimize-video.js work/<folder>",
   );
-  optimizeVideo(landingDir);
+  optimizeVideo(pageDir);
 }

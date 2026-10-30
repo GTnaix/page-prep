@@ -1,0 +1,534 @@
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+
+<script>
+  window.BINOM_CLICKID = "<?php echo $subid; ?>";
+  window.BINOM_PAGE_TYPE = "offer";
+</script>
+
+<script src="/../../landers/include/events-stat.js"></script>
+
+<script>
+  (function () {
+    "use strict";
+
+    var CFG = {
+      FB_PIXEL: "<?php echo $pixel_fb; ?>",
+      CLICKID_MACRO: "{clickid}",
+      LANDING_COOKIE: "landing_start_time",
+      OFFER_COOKIE: "offer_start_time",
+      PH_COOKIE: "ph_distinct_id",
+      ANON_COOKIE: "anon_id",
+      P_TS: "tmsl",
+      P_CID: "tmsl_cid",
+      P_ACTIVE: "tmsla",
+      P_DWELL: "tmsld",
+      P_SRV: "tsrv",
+      SRV_MEANS: "auto",
+      SRV_AUTO_GAP: 4,
+      P_EID: "eid",
+      F_TMSL: "tmsl",
+      F_TMSF: "tmsf",
+      F_PH: "sub_id_19",
+      F_SOURCE: "sub_id_18",
+      F_ACTIVE_L: null,
+      F_ACTIVE_F: null,
+      SEND_DURATIONS: false,
+      COOKIE_DAYS: 7,
+      PH_COOKIE_DAYS: 400,
+      ANON_DAYS: 400,
+      MAX_DWELL_SEC: 6 * 3600,
+      BEACON_URL: "",
+      VIEW_TARGET: "#buttonSbmt",
+    };
+
+    var SECURE = location.protocol === "https:";
+
+    function setCookie(name, value, days) {
+      var s = name + "=" + encodeURIComponent(value) + "; path=/; SameSite=Lax";
+      if (days) s += "; expires=" + new Date(Date.now() + days * 864e5).toUTCString();
+      if (SECURE) s += "; Secure";
+      document.cookie = s;
+    }
+
+    function getCookie(name) {
+      var m = document.cookie.match(
+        new RegExp("(?:^|; )" + name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1") + "=([^;]*)"),
+      );
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    function lsGet(k) {
+      try {
+        return localStorage.getItem(k);
+      } catch (e) {
+        return null;
+      }
+    }
+    function lsSet(k, v) {
+      try {
+        localStorage.setItem(k, v);
+      } catch (e) {}
+    }
+
+    function param(name) {
+      return new URLSearchParams(location.search).get(name);
+    }
+
+    function safe(fn) {
+      return function () {
+        try {
+          return fn.apply(this, arguments);
+        } catch (e) {
+          if (window.console) console.warn("[trk]", e);
+        }
+      };
+    }
+
+    function getClickId() {
+      var raw = CFG.CLICKID_MACRO;
+      if (raw && raw.indexOf("{") === -1 && raw.indexOf("<") === -1 && raw.length > 3) return raw;
+      var q = new URLSearchParams(location.search);
+      return q.get("clickid") || q.get("cid") || q.get("subid") || "";
+    }
+
+    var CLICK_ID = getClickId();
+
+    function getExternalId() {
+      if (CLICK_ID) return CLICK_ID;
+      var fromUrl = param(CFG.P_EID);
+      if (!fromUrl && location.hash && location.hash.indexOf("=") !== -1) {
+        try {
+          fromUrl = new URLSearchParams(location.hash.replace(/^#/, "")).get(CFG.P_EID);
+        } catch (e) {}
+      }
+      if (fromUrl && /^[\w.-]{6,64}$/.test(fromUrl)) {
+        setCookie(CFG.ANON_COOKIE, fromUrl, CFG.ANON_DAYS);
+        lsSet(CFG.ANON_COOKIE, fromUrl);
+        return fromUrl;
+      }
+      var id = getCookie(CFG.ANON_COOKIE) || lsGet(CFG.ANON_COOKIE);
+      if (!id) {
+        id = "anon-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+        setCookie(CFG.ANON_COOKIE, id, CFG.ANON_DAYS);
+        lsSet(CFG.ANON_COOKIE, id);
+      }
+      return id;
+    }
+
+    var EXTERNAL_ID = getExternalId();
+
+    var IS_BOT =
+      navigator.webdriver === true ||
+      document.visibilityState === "prerender" ||
+      document.prerendering === true;
+
+    var landingTs = null;
+    var landingSrc = "none";
+    var landingActive = null;
+
+    function validTs(v) {
+      return /^\d{10,16}$/.test(String(v || ""));
+    }
+
+    function storeLanding(ts) {
+      var payload = JSON.stringify({ cid: CLICK_ID, ts: ts });
+      setCookie(CFG.LANDING_COOKIE, payload, CFG.COOKIE_DAYS);
+      lsSet(CFG.LANDING_COOKIE, payload);
+    }
+
+    function parseStored(raw) {
+      if (!raw) return null;
+      try {
+        var o = JSON.parse(raw);
+        if (!o || !validTs(o.ts)) return null;
+        if (CLICK_ID && o.cid && o.cid !== CLICK_ID) return null;
+        return Number(o.ts);
+      } catch (e) {
+        return validTs(raw) ? Number(raw) : null;
+      }
+    }
+
+    var PAGE_LOAD = Date.now();
+
+    function anyParam(name) {
+      var v = param(name);
+      if (v) return v;
+      var hs = hashParams();
+      return hs ? hs.get(name) : null;
+    }
+
+    function serverTs() {
+      var v = anyParam(CFG.P_SRV);
+      if (/^\d{10}$/.test(String(v || ""))) return Number(v) * 1000;
+      if (/^\d{13}$/.test(String(v || ""))) return Number(v);
+      return null;
+    }
+
+    function srvMeans() {
+      var ts = serverTs();
+      if (ts === null) return null;
+      if (CFG.SRV_MEANS === "landing" || CFG.SRV_MEANS === "offer") return CFG.SRV_MEANS;
+
+      var gapSec = (PAGE_LOAD - ts) / 1000;
+      if (gapSec < 0) return null;
+
+      var dw = anyParam(CFG.P_DWELL);
+      if (/^\d{1,7}$/.test(String(dw || ""))) {
+        return gapSec >= Number(dw) * 0.5 ? "landing" : "offer";
+      }
+      return gapSec >= CFG.SRV_AUTO_GAP ? "landing" : "offer";
+    }
+
+    function hashParams() {
+      var h = location.hash ? location.hash.replace(/^#/, "") : "";
+      if (!h || h.indexOf("=") === -1) return null;
+      try {
+        return new URLSearchParams(h);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function cleanHash() {
+      if (!history.replaceState) return;
+      try {
+        history.replaceState(null, "", location.pathname + location.search);
+      } catch (e) {}
+    }
+
+    function resolveLanding() {
+      var srv = serverTs();
+      var means = srvMeans();
+
+      if (srv !== null && means === "landing") {
+        landingTs = srv;
+        landingSrc = "server";
+        storeLanding(landingTs);
+        var sa = anyParam(CFG.P_ACTIVE);
+        if (/^\d{1,7}$/.test(String(sa || ""))) landingActive = Number(sa);
+        if (location.hash && location.hash.indexOf("=") !== -1) cleanHash();
+        return;
+      }
+
+      if (srv !== null && means === "offer") {
+        var dw = anyParam(CFG.P_DWELL);
+        if (/^\d{1,7}$/.test(String(dw || ""))) {
+          landingTs = srv - Number(dw) * 1000;
+          landingSrc = "server_calc";
+          storeLanding(landingTs);
+          var sa2 = anyParam(CFG.P_ACTIVE);
+          if (/^\d{1,7}$/.test(String(sa2 || ""))) landingActive = Number(sa2);
+          if (location.hash && location.hash.indexOf("=") !== -1) cleanHash();
+          return;
+        }
+      }
+
+      var pTs = param(CFG.P_TS);
+      var pCid = param(CFG.P_CID);
+      var pAct = param(CFG.P_ACTIVE);
+      var srcName = "url";
+
+      if (!validTs(pTs)) {
+        var hs = hashParams();
+        if (hs && validTs(hs.get(CFG.P_TS))) {
+          pTs = hs.get(CFG.P_TS);
+          pCid = hs.get(CFG.P_CID);
+          pAct = hs.get(CFG.P_ACTIVE);
+          srcName = "hash";
+        }
+      }
+
+      if (validTs(pTs) && (!CLICK_ID || !pCid || pCid === CLICK_ID)) {
+        landingTs = Number(pTs);
+        landingSrc = srcName;
+        storeLanding(landingTs);
+        if (/^\d{1,7}$/.test(String(pAct || ""))) landingActive = Number(pAct);
+        if (srcName === "hash") cleanHash();
+        return;
+      }
+
+      var fromCookie = parseStored(getCookie(CFG.LANDING_COOKIE));
+      if (fromCookie) {
+        landingTs = fromCookie;
+        landingSrc = "cookie";
+        return;
+      }
+
+      var fromLs = parseStored(lsGet(CFG.LANDING_COOKIE));
+      if (fromLs) {
+        landingTs = fromLs;
+        landingSrc = "ls";
+        return;
+      }
+
+      landingTs = null;
+      landingSrc = "none";
+    }
+
+    var offerTs = null;
+
+    function initOffer() {
+      if (srvMeans() === "offer") {
+        offerTs = serverTs();
+        activeLastTick = Date.now();
+        return;
+      }
+
+      var stored = parseStored(getCookie(CFG.OFFER_COOKIE) || lsGet(CFG.OFFER_COOKIE));
+      if (stored) {
+        offerTs = stored;
+      } else {
+        offerTs = Date.now();
+        var payload = JSON.stringify({ cid: CLICK_ID, ts: offerTs });
+        setCookie(CFG.OFFER_COOKIE, payload, 1);
+        lsSet(CFG.OFFER_COOKIE, payload);
+      }
+      activeLastTick = Date.now();
+    }
+
+    var activeMs = 0;
+    var activeLastTick = Date.now();
+    var isVisible = !document.hidden;
+
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        if (isVisible) activeMs += Date.now() - activeLastTick;
+        isVisible = false;
+        sendBeacon();
+      } else {
+        activeLastTick = Date.now();
+        isVisible = true;
+      }
+    });
+
+    function activeSeconds() {
+      var total = activeMs + (isVisible ? Date.now() - activeLastTick : 0);
+      return Math.max(0, Math.round(total / 1000));
+    }
+
+    function dwellSec(ts) {
+      if (!ts) return null;
+      var d = Math.round((Date.now() - ts) / 1000);
+      if (d < 0 || d > CFG.MAX_DWELL_SEC) return null;
+      return d;
+    }
+
+    function setField(form, name, value) {
+      if (!name) return;
+      var el = form.querySelector('input[name="' + name + '"]');
+      if (!el) {
+        el = document.createElement("input");
+        el.type = "hidden";
+        el.name = name;
+        form.appendChild(el);
+      }
+      el.value = value;
+    }
+
+    var fillForms = safe(function () {
+      syncPosthog();
+
+      var lDwell = dwellSec(landingTs);
+      var fDwell = dwellSec(offerTs);
+      var src = landingTs ? (lDwell === null ? "invalid" : landingSrc) : landingSrc;
+
+      var vTmsl, vTmsf;
+      if (CFG.SEND_DURATIONS) {
+        vTmsl = lDwell === null ? "" : String(lDwell);
+        vTmsf = fDwell === null ? "" : String(fDwell);
+      } else {
+        vTmsl = lDwell === null ? "" : String(landingTs);
+        vTmsf = fDwell === null ? "" : String(offerTs);
+      }
+
+      var ph = getCookie(CFG.PH_COOKIE) || "";
+
+      var forms = document.querySelectorAll("form");
+      for (var i = 0; i < forms.length; i++) {
+        setField(forms[i], CFG.F_TMSL, vTmsl);
+        setField(forms[i], CFG.F_TMSF, vTmsf);
+        setField(forms[i], CFG.F_PH, ph);
+        setField(forms[i], CFG.F_SOURCE, src);
+        if (CFG.F_ACTIVE_L && landingActive !== null)
+          setField(forms[i], CFG.F_ACTIVE_L, String(landingActive));
+        if (CFG.F_ACTIVE_F) setField(forms[i], CFG.F_ACTIVE_F, String(activeSeconds()));
+      }
+    });
+
+    function syncPosthog() {
+      if (typeof posthog === "undefined" || typeof posthog.get_distinct_id !== "function")
+        return false;
+      var id = posthog.get_distinct_id();
+      if (!id) return false;
+      setCookie(CFG.PH_COOKIE, id, CFG.PH_COOKIE_DAYS);
+      return true;
+    }
+
+    function startPosthogSync() {
+      if (syncPosthog()) {
+        fillForms();
+        return;
+      }
+      var n = 0;
+      var t = setInterval(function () {
+        if (syncPosthog()) {
+          fillForms();
+          clearInterval(t);
+        } else if (++n > 30) clearInterval(t);
+      }, 150);
+    }
+
+    var formViewed = false;
+
+    function trackFormView() {
+      if (formViewed) return;
+      formViewed = true;
+      fbq("track", "ViewContent", {}, { eventID: EXTERNAL_ID + "-ViewContent" });
+    }
+
+    function loadPixel() {
+      !(function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = "2.0";
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+
+      fbq("init", CFG.FB_PIXEL, CLICK_ID ? { external_id: CLICK_ID } : {});
+    }
+
+    function watchFormView() {
+      if (!("IntersectionObserver" in window)) {
+        setTimeout(trackFormView, 1000);
+        return;
+      }
+
+      var obs = new IntersectionObserver(
+        function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].isIntersecting) {
+              trackFormView();
+              obs.unobserve(entries[i].target);
+            }
+          }
+        },
+        { threshold: 0.5, rootMargin: "50px" },
+      );
+
+      var el = document.querySelector(CFG.VIEW_TARGET);
+      if (el) {
+        obs.observe(el);
+        return;
+      }
+
+      var mo = new MutationObserver(function () {
+        var t = document.querySelector(CFG.VIEW_TARGET);
+        if (t) {
+          obs.observe(t);
+          mo.disconnect();
+        }
+      });
+      mo.observe(document.documentElement, { childList: true, subtree: true });
+      setTimeout(function () {
+        mo.disconnect();
+      }, 15000);
+    }
+
+    var beaconSent = false;
+
+    function sendBeacon() {
+      if (!CFG.BEACON_URL || beaconSent || !navigator.sendBeacon) return;
+      beaconSent = true;
+      try {
+        navigator.sendBeacon(
+          CFG.BEACON_URL,
+          new Blob(
+            [
+              JSON.stringify({
+                cid: CLICK_ID,
+                land: dwellSec(landingTs),
+                offer: dwellSec(offerTs),
+                active: activeSeconds(),
+                src: landingSrc,
+              }),
+            ],
+            { type: "application/json" },
+          ),
+        );
+      } catch (e) {}
+    }
+
+    var boot = safe(function () {
+      if (IS_BOT) return;
+
+      loadPixel();
+
+      resolveLanding();
+      initOffer();
+      fillForms();
+      startPosthogSync();
+
+      document.addEventListener("submit", fillForms, true);
+
+      if ("MutationObserver" in window) {
+        var mo = new MutationObserver(function (muts) {
+          for (var i = 0; i < muts.length; i++) {
+            if (muts[i].addedNodes.length) {
+              fillForms();
+              return;
+            }
+          }
+        });
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function () {
+          fillForms();
+          watchFormView();
+        });
+      } else {
+        fillForms();
+        watchFormView();
+      }
+
+      window.addEventListener("load", function () {
+        syncPosthog();
+        fillForms();
+      });
+      window.addEventListener("pagehide", sendBeacon);
+    });
+
+    boot();
+
+    window.TRK = {
+      clickId: CLICK_ID,
+      externalId: EXTERNAL_ID,
+      landingSource: function () {
+        return landingSrc;
+      },
+      fill: fillForms,
+    };
+
+    window.getCookie = getCookie;
+  })();
+</script>
+
+<noscript>
+  <img
+    style="display: none"
+    src="https://www.facebook.com/tr?id=<?php echo $pixel_fb; ?>&ev=ViewContent&noscript=1&eid=<?php echo $subid; ?>-ViewContent"
+    width="1"
+    height="1"
+  />
+</noscript>

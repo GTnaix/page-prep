@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertInsideWork, posix, resolveJob, walkFiles } from "./lib.js";
+import { assertInsideWork, posix, resolveJob, walkFiles } from "../../scripts/lib.js";
 
 const TEXT_EXT = new Set([".html", ".htm", ".php", ".css", ".js", ".svg"]);
 const LOCAL_FILE_RE =
@@ -18,8 +18,8 @@ function isIconFile(file) {
   return name.endsWith(".ico") || name.startsWith("favicon");
 }
 
-function alwaysKeep(landingDir, file) {
-  const rel = posix(path.relative(landingDir, file)).toLowerCase();
+function alwaysKeep(pageDir, file) {
+  const rel = posix(path.relative(pageDir, file)).toLowerCase();
   return (
     rel === "style.css" ||
     rel === "assets/css/style.css" ||
@@ -47,20 +47,20 @@ function isSkippableUrl(value) {
   return /^https?:/i.test(value) || value.startsWith("//");
 }
 
-function resolveLocal(landingDir, fromFile, raw) {
+function resolveLocal(pageDir, fromFile, raw) {
   const value = stripQuery(raw);
   if (isSkippableUrl(value)) return null;
 
   const candidates = [];
   if (value.startsWith("/")) {
-    candidates.push(path.resolve(landingDir, value.replace(/^\/+/, "")));
+    candidates.push(path.resolve(pageDir, value.replace(/^\/+/, "")));
   } else {
     candidates.push(path.resolve(path.dirname(fromFile), value));
-    candidates.push(path.resolve(landingDir, value.replace(/^\.\/+/, "")));
+    candidates.push(path.resolve(pageDir, value.replace(/^\.\/+/, "")));
   }
 
   for (const candidate of candidates) {
-    if (!isInside(landingDir, candidate)) continue;
+    if (!isInside(pageDir, candidate)) continue;
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
       return path.resolve(candidate);
     }
@@ -68,18 +68,18 @@ function resolveLocal(landingDir, fromFile, raw) {
   return null;
 }
 
-function addRef(keep, queue, seenParse, landingDir, fromFile, raw) {
-  const abs = resolveLocal(landingDir, fromFile, raw);
+function addRef(keep, queue, seenParse, pageDir, fromFile, raw) {
+  const abs = resolveLocal(pageDir, fromFile, raw);
   if (!abs) return;
   if (!keep.has(abs)) keep.add(abs);
   if (!seenParse.has(abs)) queue.push(abs);
 }
 
-function collectAttrRefs(keep, queue, seenParse, landingDir, fromFile, text) {
+function collectAttrRefs(keep, queue, seenParse, pageDir, fromFile, text) {
   const ATTR_RE =
     /\b(?:href|src|poster|data-src|data-poster|data-background)\s*=\s*["']([^"']+)["']/gi;
   for (const match of text.matchAll(ATTR_RE)) {
-    addRef(keep, queue, seenParse, landingDir, fromFile, match[1]);
+    addRef(keep, queue, seenParse, pageDir, fromFile, match[1]);
   }
 
   const SRCSET_RE = /\bsrcset\s*=\s*["']([^"']+)["']/gi;
@@ -89,7 +89,7 @@ function collectAttrRefs(keep, queue, seenParse, landingDir, fromFile, text) {
         keep,
         queue,
         seenParse,
-        landingDir,
+        pageDir,
         fromFile,
         part.trim().split(/\s+/)[0],
       );
@@ -97,10 +97,10 @@ function collectAttrRefs(keep, queue, seenParse, landingDir, fromFile, text) {
   }
 }
 
-function collectCssRefs(keep, queue, seenParse, landingDir, fromFile, text) {
+function collectCssRefs(keep, queue, seenParse, pageDir, fromFile, text) {
   const URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
   for (const match of text.matchAll(URL_RE)) {
-    addRef(keep, queue, seenParse, landingDir, fromFile, match[2]);
+    addRef(keep, queue, seenParse, pageDir, fromFile, match[2]);
   }
 
   const IMPORT_RE =
@@ -110,20 +110,20 @@ function collectCssRefs(keep, queue, seenParse, landingDir, fromFile, text) {
       keep,
       queue,
       seenParse,
-      landingDir,
+      pageDir,
       fromFile,
       match[2] || match[4] || "",
     );
   }
 }
 
-function collectQuotedRefs(keep, queue, seenParse, landingDir, fromFile, text) {
+function collectQuotedRefs(keep, queue, seenParse, pageDir, fromFile, text) {
   for (const match of text.matchAll(LOCAL_FILE_RE)) {
-    addRef(keep, queue, seenParse, landingDir, fromFile, match[1]);
+    addRef(keep, queue, seenParse, pageDir, fromFile, match[1]);
   }
 }
 
-function collectReferencedFiles(landingDir, entry) {
+function collectReferencedFiles(pageDir, entry) {
   const keep = new Set();
   const queue = [];
   const seenParse = new Set();
@@ -146,23 +146,23 @@ function collectReferencedFiles(landingDir, entry) {
       continue;
     }
 
-    collectAttrRefs(keep, queue, seenParse, landingDir, file, text);
-    collectCssRefs(keep, queue, seenParse, landingDir, file, text);
-    collectQuotedRefs(keep, queue, seenParse, landingDir, file, text);
+    collectAttrRefs(keep, queue, seenParse, pageDir, file, text);
+    collectCssRefs(keep, queue, seenParse, pageDir, file, text);
+    collectQuotedRefs(keep, queue, seenParse, pageDir, file, text);
   }
 
   return keep;
 }
 
-function removeEmptyDirs(dir, landingDir, assetsDir) {
+function removeEmptyDirs(dir, pageDir, assetsDir) {
   if (!fs.existsSync(dir)) return;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      removeEmptyDirs(path.join(dir, entry.name), landingDir, assetsDir);
+      removeEmptyDirs(path.join(dir, entry.name), pageDir, assetsDir);
     }
   }
   const abs = path.resolve(dir);
-  if (abs === path.resolve(landingDir) || abs === path.resolve(assetsDir)) {
+  if (abs === path.resolve(pageDir) || abs === path.resolve(assetsDir)) {
     return;
   }
   if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
@@ -185,26 +185,26 @@ function tryRemove(file) {
   return false;
 }
 
-export function cleanFiles(landingDir, entry) {
-  assertInsideWork(landingDir);
+export function cleanFiles(pageDir, entry) {
+  assertInsideWork(pageDir);
 
-  const assetsDir = path.join(landingDir, "assets");
-  const referenced = collectReferencedFiles(landingDir, entry);
+  const assetsDir = path.join(pageDir, "assets");
+  const referenced = collectReferencedFiles(pageDir, entry);
   const removed = [];
   const skipped = [];
 
-  for (const file of walkFiles(landingDir)) {
+  for (const file of walkFiles(pageDir)) {
     const full = path.resolve(file);
     if (referenced.has(full)) continue;
-    if (alwaysKeep(landingDir, full)) continue;
+    if (alwaysKeep(pageDir, full)) continue;
     if (isIconFile(full)) continue;
     if (path.basename(full).toLowerCase().endsWith(".bak")) continue;
-    const rel = posix(path.relative(landingDir, full));
+    const rel = posix(path.relative(pageDir, full));
     if (tryRemove(full)) removed.push(rel);
     else skipped.push(rel);
   }
 
-  removeEmptyDirs(landingDir, landingDir, assetsDir);
+  removeEmptyDirs(pageDir, pageDir, assetsDir);
 
   if (removed.length === 0 && skipped.length === 0) {
     console.log("No leftover files");
@@ -221,9 +221,9 @@ export function cleanFiles(landingDir, entry) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/clean-files.js work/<folder>",
+    "Usage: node src/steps/shared/clean-files.js work/<folder>",
   );
-  cleanFiles(landingDir, entry);
+  cleanFiles(pageDir, entry);
 }

@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { fail, posix, resolveJob } from "./lib.js";
+import { fail, posix, resolveJob } from "../../scripts/lib.js";
 
 const require = createRequire(import.meta.url);
 const ffmpegPath = require("ffmpeg-static");
@@ -99,10 +99,10 @@ async function makePoster(videoFile, destWebp) {
   return fs.existsSync(destWebp);
 }
 
-export async function ensureVideoAttrs(landingDir, entry) {
+export async function ensureVideoAttrs(pageDir, entry) {
   const htmlDir = path.dirname(entry);
   const html = fs.readFileSync(entry, "utf8");
-  const imagesDir = path.join(landingDir, "assets", "images");
+  const imagesDir = path.join(pageDir, "assets", "images");
   let posters = 0;
   let updated = 0;
   let cursor = 0;
@@ -155,9 +155,9 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/ensure-video-attrs.js work/<folder>",
+    "Usage: node src/steps/shared/ensure-video-attrs.js work/<folder>",
   );
-  ensureVideoAttrs(landingDir, entry).catch((error) => fail(error.message || error));
+  ensureVideoAttrs(pageDir, entry).catch((error) => fail(error.message || error));
 }

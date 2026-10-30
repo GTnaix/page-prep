@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 import { ROOT, assertInsideWork, fail, resolveJob } from "./lib.js";
 import { collectZipFiles, writeZip } from "./write-zip.js";
 
-function removeBackups(landingDir) {
-  for (const name of fs.readdirSync(landingDir)) {
+function removeBackups(pageDir) {
+  for (const name of fs.readdirSync(pageDir)) {
     if (!name.toLowerCase().endsWith(".bak")) continue;
-    fs.rmSync(path.join(landingDir, name), { force: true });
+    fs.rmSync(path.join(pageDir, name), { force: true });
     console.log(`Removed ${name}`);
   }
 }
@@ -27,23 +27,23 @@ function renameToPhp(entry) {
   return dest;
 }
 
-export async function packLanding(landingDir, entry) {
-  assertInsideWork(landingDir);
-  removeBackups(landingDir);
+export async function packPage(pageDir, entry) {
+  assertInsideWork(pageDir);
+  removeBackups(pageDir);
   const phpFile = renameToPhp(entry);
-  const assetsDir = path.join(landingDir, "assets");
+  const assetsDir = path.join(pageDir, "assets");
   if (!fs.existsSync(assetsDir)) fail("No assets/ folder");
 
-  const zipPath = `${landingDir}.zip`;
+  const zipPath = `${pageDir}.zip`;
   if (fs.existsSync(zipPath)) fs.rmSync(zipPath, { force: true });
   await writeZip(zipPath, collectZipFiles(phpFile, assetsDir));
   console.log(`Zip: ${path.relative(ROOT, zipPath)}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
     "Usage: npm run pack -- work/<folder>",
   );
-  packLanding(landingDir, entry).catch((error) => fail(error.message || error));
+  packPage(pageDir, entry).catch((error) => fail(error.message || error));
 }

@@ -1,24 +1,24 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findCssFile, posix, resolveJob } from "./lib.js";
+import { findCssFile, posix, resolveJob } from "../../scripts/lib.js";
 
-function findAsset(cssDir, landingDir, filePart) {
+function findAsset(cssDir, pageDir, filePart) {
   const base = path.basename(filePart);
   const stem = path.basename(filePart, path.extname(filePart));
   const exact = [
     path.resolve(cssDir, filePart),
-    path.resolve(landingDir, filePart),
-    path.join(landingDir, "assets", "fonts", base),
-    path.join(landingDir, "assets", "images", base),
+    path.resolve(pageDir, filePart),
+    path.join(pageDir, "assets", "fonts", base),
+    path.join(pageDir, "assets", "images", base),
   ];
   for (const candidate of exact) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate;
   }
 
   for (const dir of [
-    path.join(landingDir, "assets", "fonts"),
-    path.join(landingDir, "assets", "images"),
+    path.join(pageDir, "assets", "fonts"),
+    path.join(pageDir, "assets", "images"),
     cssDir,
   ]) {
     if (!fs.existsSync(dir)) continue;
@@ -33,7 +33,7 @@ function findAsset(cssDir, landingDir, filePart) {
   return null;
 }
 
-function rewriteOrDropUrls(css, cssPath, landingDir) {
+function rewriteOrDropUrls(css, cssPath, pageDir) {
   const cssDir = path.dirname(cssPath);
   let fixed = 0;
   let dropped = 0;
@@ -53,7 +53,7 @@ function rewriteOrDropUrls(css, cssPath, landingDir) {
       const hashIndex = value.search(/[?#]/);
       const filePart = hashIndex === -1 ? value : value.slice(0, hashIndex);
       const suffix = hashIndex === -1 ? "" : value.slice(hashIndex);
-      const abs = findAsset(cssDir, landingDir, filePart);
+      const abs = findAsset(cssDir, pageDir, filePart);
       if (!abs) {
         dropped += 1;
         return "url()";
@@ -90,15 +90,15 @@ function tidyEmptyUrls(css) {
   return { css: next.replace(/\n{3,}/g, "\n\n"), droppedFaces };
 }
 
-export function fixCssUrls(landingDir, cssFile) {
-  const cssPath = findCssFile(landingDir, cssFile);
+export function fixCssUrls(pageDir, cssFile) {
+  const cssPath = findCssFile(pageDir, cssFile);
   if (!cssPath) {
     console.log("CSS urls: no style.css");
     return;
   }
 
   const source = fs.readFileSync(cssPath, "utf8");
-  const rewritten = rewriteOrDropUrls(source, cssPath, landingDir);
+  const rewritten = rewriteOrDropUrls(source, cssPath, pageDir);
   const tidied = tidyEmptyUrls(rewritten.css);
   fs.writeFileSync(cssPath, tidied.css);
 
@@ -112,9 +112,9 @@ export function fixCssUrls(landingDir, cssFile) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, cssFile } = resolveJob(
+  const { pageDir, cssFile } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/fix-css-urls.js work/<folder>",
+    "Usage: node src/steps/shared/fix-css-urls.js work/<folder>",
   );
-  fixCssUrls(landingDir, cssFile);
+  fixCssUrls(pageDir, cssFile);
 }

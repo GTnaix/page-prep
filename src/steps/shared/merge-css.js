@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ROOT, resolveJob } from "./lib.js";
+import { ROOT, resolveJob } from "../../scripts/lib.js";
 
 function isInsideHtmlComment(html, index) {
   const before = html.lastIndexOf("<!--", index);
@@ -206,7 +206,7 @@ export function mergeCss(entry, cssOut) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { entry, cssFile } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/merge-css.js work/<folder>",
+    "Usage: node src/steps/shared/merge-css.js work/<folder>",
   );
   mergeCss(entry, cssFile);
 }

@@ -5,7 +5,7 @@ import postcss from "postcss";
 import safeParser from "postcss-safe-parser";
 import selectorParser from "postcss-selector-parser";
 import { PurgeCSS } from "purgecss";
-import { ROOT, fail, resolveJob } from "./lib.js";
+import { ROOT, fail, resolveJob } from "../../scripts/lib.js";
 
 function selectorOk(selector) {
   if (!String(selector || "").trim()) return false;
@@ -33,6 +33,37 @@ async function recoverCss(raw) {
   return dropBrokenSelectors(recovered.css);
 }
 
+function decodeHtml(value) {
+  let token = String(value || "");
+  for (let i = 0; i < 2; i += 1) {
+    const next = token
+      .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&apos;/gi, "'");
+    if (next === token) break;
+    token = next;
+  }
+  return token;
+}
+
+function extractUsedSelectors(content) {
+  const found = new Set();
+  const add = (value) => {
+    const token = decodeHtml(value).trim();
+    if (token) found.add(token);
+  };
+  for (const match of content.matchAll(/class\s*=\s*(["'])([\s\S]*?)\1/gi)) {
+    for (const token of match[2].split(/\s+/)) add(token);
+  }
+  for (const token of content.match(/[^<>"'`\s]*[^<>"'`\s:]/g) || []) add(token);
+  for (const token of content.match(/[^<>"'`\s.()]*[^<>"'`\s.():]/g) || []) add(token);
+  return [...found];
+}
+
 export async function purgeCss(entry, cssFile) {
   if (!fs.existsSync(cssFile)) {
     fail(`No style.css in ${path.dirname(cssFile)}. Run merge-css first.`);
@@ -56,6 +87,7 @@ export async function purgeCss(entry, cssFile) {
     [purged] = await new PurgeCSS().purge({
       content: [{ raw: fs.readFileSync(entry, "utf8"), extension: "html" }],
       css: [{ raw: source }],
+      defaultExtractor: extractUsedSelectors,
     });
   } catch (error) {
     if (source !== raw) fs.writeFileSync(cssFile, source);
@@ -77,7 +109,7 @@ export async function purgeCss(entry, cssFile) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { entry, cssFile } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/purge-css.js work/<folder>",
+    "Usage: node src/steps/shared/purge-css.js work/<folder>",
   );
   purgeCss(entry, cssFile).catch((error) => fail(error.message || error));
 }

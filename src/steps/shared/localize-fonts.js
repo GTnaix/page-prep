@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findCssFile, posix, uniqueDest, resolveJob } from "./lib.js";
+import { findCssFile, posix, uniqueDest, resolveJob } from "../../scripts/lib.js";
 
 const FONT_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -218,9 +218,9 @@ function deleteDroppedFonts(cssDir, before, after) {
   return removed;
 }
 
-export async function localizeFonts(landingDir, entry) {
+export async function localizeFonts(pageDir, entry) {
   const html = fs.readFileSync(entry, "utf8");
-  const cssPath = findCssFile(landingDir);
+  const cssPath = findCssFile(pageDir);
   if (!cssPath) {
     console.log("Fonts: skipped, no style.css");
     return;
@@ -249,7 +249,7 @@ export async function localizeFonts(landingDir, entry) {
       );
 
       if (remoteBlocks.length > 0) {
-        const fontDir = path.join(landingDir, "assets", "fonts");
+        const fontDir = path.join(pageDir, "assets", "fonts");
         const urlToRel = new Map();
         const urlToBlock = new Map();
         for (const block of remoteBlocks) {
@@ -293,11 +293,11 @@ export async function localizeFonts(landingDir, entry) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/localize-fonts.js work/<folder>",
+    "Usage: node src/steps/shared/localize-fonts.js work/<folder>",
   );
-  localizeFonts(landingDir, entry).catch((error) => {
+  localizeFonts(pageDir, entry).catch((error) => {
     console.error(error.message || error);
     process.exit(1);
   });

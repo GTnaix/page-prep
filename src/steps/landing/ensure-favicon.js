@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { posix, resolveJob, walkFiles } from "./lib.js";
+import { posix, resolveJob, walkFiles } from "../../scripts/lib.js";
 
 function isIconFile(file) {
   const name = path.basename(file).toLowerCase();
@@ -40,8 +40,8 @@ function hasIconLink(html) {
   });
 }
 
-function hrefFor(landingDir, file) {
-  const rel = posix(path.relative(landingDir, file));
+function hrefFor(pageDir, file) {
+  const rel = posix(path.relative(pageDir, file));
   return `./${rel}`.replace(/^\.\/\.\//, "./");
 }
 
@@ -58,8 +58,8 @@ function injectLink(html, tag) {
   return `${tag}\n${html}`;
 }
 
-export function ensureFavicon(landingDir, entry) {
-  const favicon = pickFavicon(walkFiles(landingDir));
+export function ensureFavicon(pageDir, entry) {
+  const favicon = pickFavicon(walkFiles(pageDir));
   if (!favicon) {
     console.log("Favicon: none");
     return;
@@ -73,7 +73,7 @@ export function ensureFavicon(landingDir, entry) {
 
   html = injectLink(
     html,
-    `<link rel="icon" href="${hrefFor(landingDir, favicon)}" />`,
+    `<link rel="icon" href="${hrefFor(pageDir, favicon)}" />`,
   );
   fs.writeFileSync(entry, html);
   console.log(`Favicon: ${path.basename(favicon)}, link added`);
@@ -83,9 +83,9 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/ensure-favicon.js work/<folder>",
+    "Usage: node src/steps/landing/ensure-favicon.js work/<folder>",
   );
-  ensureFavicon(landingDir, entry);
+  ensureFavicon(pageDir, entry);
 }

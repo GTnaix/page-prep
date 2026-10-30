@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { ROOT, fail, findCssFile, resolveJob, uniqueDest, walkFiles } from "./lib.js";
+import { ROOT, fail, findCssFile, resolveJob, uniqueDest, walkFiles } from "../../scripts/lib.js";
 
 const CONVERT_EXT = new Set([".jpg", ".jpeg", ".png", ".gif"]);
 const CHECK_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"]);
@@ -42,10 +42,10 @@ function stripDroppedImgs(html, fromDir, dropped) {
   });
 }
 
-async function dropBrokenRasters(landingDir, entry, html) {
+async function dropBrokenRasters(pageDir, entry, html) {
   const fromDir = path.dirname(entry);
   const dropped = new Set();
-  for (const file of walkFiles(landingDir)) {
+  for (const file of walkFiles(pageDir)) {
     if (!CHECK_EXT.has(path.extname(file).toLowerCase())) continue;
     if (!(await isBrokenRaster(file))) continue;
     dropped.add(path.resolve(file));
@@ -122,14 +122,14 @@ async function convertFile(file, attrCap) {
   };
 }
 
-export async function optimizeImages(landingDir, entry) {
+export async function optimizeImages(pageDir, entry) {
   let htmlOut = await dropBrokenRasters(
-    landingDir,
+    pageDir,
     entry,
     fs.readFileSync(entry, "utf8"),
   );
   const caps = collectImgCaps(htmlOut);
-  const files = walkFiles(landingDir).filter((file) =>
+  const files = walkFiles(pageDir).filter((file) =>
     CONVERT_EXT.has(path.extname(file).toLowerCase()),
   );
 
@@ -138,7 +138,7 @@ export async function optimizeImages(landingDir, entry) {
     console.log("No raster images to convert");
     return;
   }
-  const cssFile = findCssFile(landingDir);
+  const cssFile = findCssFile(pageDir);
   let cssOut = cssFile ? fs.readFileSync(cssFile, "utf8") : null;
   let converted = 0;
   let saved = 0;
@@ -183,9 +183,9 @@ export async function optimizeImages(landingDir, entry) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, entry } = resolveJob(
+  const { pageDir, entry } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/optimize-images.js work/<folder>",
+    "Usage: node src/steps/shared/optimize-images.js work/<folder>",
   );
-  optimizeImages(landingDir, entry).catch((error) => fail(error.message || error));
+  optimizeImages(pageDir, entry).catch((error) => fail(error.message || error));
 }

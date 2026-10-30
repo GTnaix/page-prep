@@ -3,10 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import postcss from "postcss";
 import prettier from "prettier";
-import { fail, findCssFile, resolveJob } from "./lib.js";
+import { fail, findCssFile, resolveJob } from "../../scripts/lib.js";
 
-export async function formatCss(landingDir, cssFile) {
-  const cssPath = findCssFile(landingDir, cssFile);
+export async function formatCss(pageDir, cssFile) {
+  const cssPath = findCssFile(pageDir, cssFile);
   if (!cssPath) {
     console.log("Format skipped: no style.css");
     return;
@@ -33,9 +33,9 @@ export async function formatCss(landingDir, cssFile) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { landingDir, cssFile } = resolveJob(
+  const { pageDir, cssFile } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/scripts/format-css.js work/<folder>",
+    "Usage: node src/steps/shared/format-css.js work/<folder>",
   );
-  formatCss(landingDir, cssFile).catch((error) => fail(error.message || error));
+  formatCss(pageDir, cssFile).catch((error) => fail(error.message || error));
 }

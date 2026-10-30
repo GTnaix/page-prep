@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "prep": "node src/scripts/prep.js",
-    "format": "node src/scripts/format-html.js",
+    "format": "node src/steps/shared/format-html.js",
     "pack": "node src/scripts/pack.js"
   },
   "devDependencies": {
