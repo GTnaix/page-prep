@@ -1,7 +1,7 @@
-Страна: AU
+Страна: CA
 Язык: en
 CRM: RVG
-affiliate_id: 67
+affiliate_id: 1
 Направление: facebook
 Антифрод: да
 Номер: 001
@@ -27,7 +27,8 @@ index.html.bak не править и не удалять.
   - Не создавать и не пересобирать.
   - id="form" и method не менять. Спаны и id="buttonSbmt" не удалять.
     Если стоят не на своём месте — переставить по порядку ниже.
-  - Скрытые language и country — тот же язык и та же страна
+  - Скрытые language и country — язык и страна из шапки.
+    country в поле писать маленькими буквами.
   - affiliate_id — значение из шапки
   - action:
     антифрод да, RVG: ../../landers/include/working-pro-valid2/send.php
