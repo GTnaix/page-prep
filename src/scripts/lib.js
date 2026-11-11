@@ -56,6 +56,21 @@ export function assertInsideWork(pageDir) {
   }
 }
 
+export function pageDirFromArgs(argv, usage) {
+  if (argv.some((arg) => arg.startsWith("-"))) fail(usage);
+  const target = argv[0];
+  if (!target) fail(usage);
+  const abs = path.isAbsolute(target) ? target : path.resolve(ROOT, target);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) {
+    fail(`Folder not found: ${abs}`);
+  }
+  assertInsideWork(abs);
+  if (path.resolve(abs) === path.resolve(ROOT, "work")) {
+    fail("Safety: work/ itself");
+  }
+  return abs;
+}
+
 function parseArgs(argv, usage, options = {}) {
   const flags = new Set(
     argv.filter((arg) => arg.startsWith("--")).map((arg) => arg.slice(2)),
@@ -65,13 +80,26 @@ function parseArgs(argv, usage, options = {}) {
   if (!target) fail(usage);
   const landing = flags.has("landing");
   const offer = flags.has("offer");
+  const google = flags.has("google");
+  const keitaro = flags.has("keitaro");
+  const aio = flags.has("aio");
+  if (keitaro && aio) fail("Use only one of --keitaro or --aio");
   if (options.requirePage) {
     for (const flag of flags) {
-      if (flag !== "landing" && flag !== "offer" && flag !== "google") fail(usage);
+      if (
+        flag !== "landing" &&
+        flag !== "offer" &&
+        flag !== "google" &&
+        flag !== "keitaro" &&
+        flag !== "aio"
+      ) {
+        fail(usage);
+      }
     }
     if (landing === offer) fail(usage);
   }
-  return { target, google: flags.has("google"), landing, offer };
+  const tracker = aio ? "aio" : keitaro ? "keitaro" : "binom";
+  return { target, google, landing, offer, tracker };
 }
 
 function resolvePageDir(target) {
@@ -103,10 +131,10 @@ function findEntryFile(dir) {
 }
 
 export function resolveJob(argv, usage, options) {
-  const { target, google, landing, offer } = parseArgs(argv, usage, options);
+  const { target, google, landing, offer, tracker } = parseArgs(argv, usage, options);
   const pageDir = resolvePageDir(target);
   const entry = findEntryFile(pageDir);
   if (!entry) fail(`No index.html / index.php in ${pageDir}`);
   const cssFile = findCssFile(pageDir) ?? path.join(pageDir, "style.css");
-  return { pageDir, entry, cssFile, google, landing, offer };
+  return { pageDir, entry, cssFile, google, landing, offer, tracker };
 }

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveJob } from "../../scripts/lib.js";
+import { stripFormRedirects } from "../shared/strip-form-redirect.js";
 
 const SNIPPET = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -20,7 +21,13 @@ function ensureAppFile(pageDir) {
     fs.writeFileSync(dest, snippet);
     return "copied";
   }
-  const current = fs.readFileSync(dest, "utf8");
+  let current = fs.readFileSync(dest, "utf8");
+  const stripped = stripFormRedirects(current);
+  if (stripped.removed) {
+    current = stripped.code;
+    fs.writeFileSync(dest, current);
+    console.log(`Form redirect removed from app.js: ${stripped.removed}`);
+  }
   if (current.includes('a[href^="#"]')) return "kept";
   fs.writeFileSync(dest, `${snippet}\n${current}`);
   return "prepended";

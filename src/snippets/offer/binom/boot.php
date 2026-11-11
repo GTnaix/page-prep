@@ -20,7 +20,7 @@
   }
 
   $offer_id = $_GET['offer_id'] ?? '{offer_id}';
-  $campaign_id = $_GET['campaign_id'] ?? '{campaign_id}';
+  $campaign_id = '{campaign_id}' ?? $_GET['campaign_id'];
   $subid = $_GET['clickid'] ?? '{clickid}';
   $ip = $_GET['ip'] ?? '{ip}';
   $refer = $_GET['referer'] ?? '{referer}';

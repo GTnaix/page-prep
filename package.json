@@ -1,12 +1,13 @@
 {
   "name": "page-prep",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "prep": "node src/scripts/prep.js",
     "format": "node src/steps/shared/format-html.js",
-    "pack": "node src/scripts/pack.js"
+    "pack": "node src/scripts/pack.js",
+    "to-html": "node src/scripts/to-html.js"
   },
   "devDependencies": {
     "archiver": "^8.0.0",

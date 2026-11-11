@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveJob } from "../../scripts/lib.js";
-import { normalizeForms } from "./form.js";
+import { disableForeignForms, normalizeForms } from "./form.js";
 
 const SNIPPETS = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -16,8 +16,8 @@ const HEAD_END = "<!-- /analytics -->";
 const HEAD_BLOCK = /<!--\s*\/?analytics\s*-->[\s\S]*?<!--\s*\/analytics\s*-->/g;
 const HEAD_MARK = /<!--\s*\/?analytics\s*-->/g;
 
-function readSnippet(name) {
-  return fs.readFileSync(path.join(SNIPPETS, name), "utf8").trim();
+function readSnippet(tracker, name) {
+  return fs.readFileSync(path.join(SNIPPETS, tracker, name), "utf8").trim();
 }
 
 function stripLeadingPhp(html) {
@@ -81,6 +81,33 @@ function injectHead(html, analytics) {
   return `${html}\n${block}\n`;
 }
 
+const FORM_RE = /<form\b[^>]*>[\s\S]*?<\/form>/gi;
+
+function isLeadForm(form) {
+  return /name\s*=\s*["'](?:first_name|last_name|sendingmail|phone-num)["']/i.test(form)
+    || /type\s*=\s*["']tel["']/i.test(form)
+    || /id\s*=\s*["'](?:phone|buttonSbmt)["']/i.test(form);
+}
+
+function stripAio(html) {
+  return html
+    .replace(/\{\{aio:head\}\}/g, "")
+    .replace(/\{\{aio:macros:number_link\}\}/g, "")
+    .replace(/\{\{aio:macros:form_loader\}\}/g, "")
+    .replace(/\{\{form\}\}/g, "")
+    .replace(/\{\{aio\}\}/g, "");
+}
+
+function replaceLeadForms(html) {
+  let count = 0;
+  const next = html.replace(FORM_RE, (form) => {
+    if (!isLeadForm(form)) return form;
+    count += 1;
+    return "{{form}}";
+  });
+  return { html: next, count };
+}
+
 function injectBody(html, libs) {
   if (/<\/body>/i.test(html)) {
     return html.replace(/<\/body>/i, `${libs}\n</body>`);
@@ -88,27 +115,45 @@ function injectBody(html, libs) {
   return `${html}\n${libs}\n`;
 }
 
-export function apply(entry, google = false) {
+function applyAio(html) {
+  let next = stripFormLibs(stripAio(stripAnalytics(html)));
+  const forms = replaceLeadForms(next);
+  next = disableForeignForms(forms.html);
+  next = injectHead(next, readSnippet("aio", "head.html"));
+  const body = forms.count
+    ? readSnippet("aio", "body.html")
+    : `{{form}}\n${readSnippet("aio", "body.html")}`;
+  return injectBody(next, body);
+}
+
+export function apply(entry, tracker = "binom", google = false) {
   let html = fs.readFileSync(entry, "utf8");
   html = stripLeadingPhp(html);
-  const suffix = google ? "-google" : "";
-  html = `${readSnippet(`boot${suffix}.php`)}\n\n${html.replace(/^\s+/, "")}`;
+  if (tracker === "aio") {
+    html = applyAio(html);
+    fs.writeFileSync(entry, html);
+    console.log("AIO macros placed, form replaced");
+    return;
+  }
+  const suffix = tracker === "binom" && google ? "-google" : "";
+  html = `${readSnippet(tracker, `boot${suffix}.php`)}\n\n${html.replace(/^\s+/, "")}`;
   html = stripAnalytics(html);
-  html = injectHead(html, readSnippet(`head${suffix}.html`));
+  html = injectHead(html, readSnippet(tracker, `head${suffix}.html`));
   html = stripFormLibs(html);
-  html = injectBody(html, readSnippet("form.html"));
-  const forms = normalizeForms(html, google);
+  html = injectBody(html, readSnippet(tracker, "form.html"));
+  const forms = normalizeForms(html, tracker, google);
   html = forms.html;
   fs.writeFileSync(entry, html);
+  const direction = tracker === "keitaro" ? "keitaro" : google ? "google" : "facebook";
   console.log(
-    `PHP: offer bootstrap, analytics, form libs replaced (${google ? "google" : "facebook"}), form ${forms.count ? "normalized" : "none"}`,
+    `PHP: offer bootstrap, analytics, form libs replaced (${direction}), form ${forms.count ? "normalized" : "none"}`,
   );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { entry, google } = resolveJob(
+  const { entry, google, tracker } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/steps/offer/apply.js work/<folder> [--google]",
+    "Usage: node src/steps/offer/apply.js work/<folder> [--google | --keitaro | --aio]",
   );
-  apply(entry, google);
+  apply(entry, tracker, google);
 }

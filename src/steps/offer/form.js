@@ -2,14 +2,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const FIELDS = fs
-  .readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "snippets", "offer", "fields.html"),
-    "utf8",
-  )
-  .trim();
+const SNIPPETS = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "snippets",
+  "offer",
+);
 
-const ACTION = "../../landers/include/working-pro-valid2/send.php";
+const ACTIONS = {
+  binom: "../../landers/include/working-pro-valid2/send.php",
+  keitaro: "../../working-pro-valid2/send.php",
+};
+
+function readFields(tracker) {
+  return fs.readFileSync(path.join(SNIPPETS, tracker, "fields.html"), "utf8").trim();
+}
 const FORM_RE = /<form\b[^>]*>[\s\S]*?<\/form>/gi;
 const INPUT_RE = /<(?:input|textarea|select)\b[^>]*>/gi;
 const HIDDEN_NAMES = new Set([
@@ -313,13 +321,13 @@ function ensureSubmit(form) {
   return `${form.slice(0, submit.index)}${next}${form.slice(submit.index + submit.tag.length)}`;
 }
 
-function rewriteOpen(open, indent) {
+function rewriteOpen(open, indent, tracker) {
   const attrs = new Map();
   const re = /([\w:-]+)\s*=\s*(["'])([\s\S]*?)\2/g;
   let match;
   while ((match = re.exec(open))) attrs.set(match[1].toLowerCase(), match[3]);
   attrs.set("id", "form");
-  attrs.set("action", ACTION);
+  attrs.set("action", ACTIONS[tracker]);
   attrs.set("method", "post");
   const preferred = ["id", "class", "action", "method"];
   const keys = [
@@ -330,16 +338,17 @@ function rewriteOpen(open, indent) {
   return `<form\n${keys.map((key) => `${pad}${key}="${attrs.get(key)}"`).join("\n")}\n${indent}>`;
 }
 
-function fieldsBlock(google) {
-  if (!google) return FIELDS;
+function fieldsBlock(tracker, google) {
+  const fields = readFields(tracker);
+  if (tracker !== "binom" || !google) return fields;
   const gtag = '<input type="hidden" name="gtag" value="<?php echo $gtmCodeSafe; ?>" />';
-  return FIELDS.replace(
+  return fields.replace(
     '<input type="text" name="email"',
     `${gtag}\n<input type="text" name="email"`,
   );
 }
 
-function normalizeForm(form, indent, google) {
+function normalizeForm(form, indent, tracker, google) {
   const open = form.match(/^<form\b[^>]*>/i)?.[0] ?? "<form>";
   const pad = `${indent}  `;
   let body = stripHidden(form.slice(open.length));
@@ -347,9 +356,9 @@ function normalizeForm(form, indent, google) {
   body = unwrapIti(body);
   body = body.replace(INPUT_RE, cleanControl);
   body = dropEmptyDivs(stripSpans(body)).replace(/^(?:[ \t]*\r?\n)+/, "").replace(/\n+$/, "");
-  const fields = fieldsBlock(google).split("\n").map((line) => pad + line).join("\n");
+  const fields = fieldsBlock(tracker, google).split("\n").map((line) => pad + line).join("\n");
   const spans = SPANS.split("\n").map((line) => pad + line).join("\n");
-  const next = `${rewriteOpen(open, indent)}\n${fields}\n\n${body}`;
+  const next = `${rewriteOpen(open, indent, tracker)}\n${fields}\n\n${body}`;
   return ensureSubmit(insertSpans(next, spans));
 }
 
@@ -363,7 +372,7 @@ export function disableForeignFormFile(entry) {
   if (next !== html) fs.writeFileSync(entry, next);
 }
 
-export function normalizeForms(html, google = false) {
+export function normalizeForms(html, tracker = "binom", google = false) {
   const forms = [...html.matchAll(FORM_RE)].map((match) => match[0]);
   const targets = new Set(forms.filter(isLeadForm));
   let count = 0;
@@ -374,19 +383,19 @@ export function normalizeForms(html, google = false) {
     count += 1;
     const lineStart = html.lastIndexOf("\n", offset) + 1;
     const indent = html.slice(lineStart, offset).match(/^[ \t]*/)?.[0] ?? "";
-    return normalizeForm(form, indent, google);
+    return normalizeForm(form, indent, tracker, google);
   });
   return { html: next, count };
 }
 
-export function normalizeFormFile(entry, google = false) {
+export function normalizeFormFile(entry, tracker = "binom", google = false) {
   const html = fs.readFileSync(entry, "utf8");
-  const forms = normalizeForms(html, google);
+  const forms = normalizeForms(html, tracker, google);
   if (forms.html !== html) fs.writeFileSync(entry, forms.html);
   return forms.count;
 }
 
-const HONEYPOT = FIELDS.split("\n").find((line) => /name="email"/.test(line));
+const HONEYPOT = readFields("binom").split("\n").find((line) => /name="email"/.test(line));
 
 function isHoneypot(tag) {
   return /name\s*=\s*["']email["']/i.test(tag)

@@ -172,6 +172,16 @@ async function dropBrokenRasters(pageDir, entry, html) {
   return html;
 }
 
+function pixelAttr(tag, name) {
+  const match = tag.match(
+    new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"),
+  );
+  if (!match) return 0;
+  const raw = (match[1] ?? match[2] ?? match[3] ?? "").trim();
+  if (!/^\d+(?:\.\d+)?(?:px)?$/i.test(raw)) return 0;
+  return parseFloat(raw);
+}
+
 function collectImgCaps(html) {
   const caps = new Map();
   for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
@@ -179,11 +189,11 @@ function collectImgCaps(html) {
     const srcMatch = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
     if (!srcMatch) continue;
     const base = path.basename(srcMatch[1].split("?")[0]);
-    const width = tag.match(/\bwidth\s*=\s*["']?(\d+)/i);
-    const height = tag.match(/\bheight\s*=\s*["']?(\d+)/i);
     const dims = [];
-    if (width) dims.push(Number(width[1]) * 2);
-    if (height) dims.push(Number(height[1]) * 2);
+    const width = pixelAttr(tag, "width");
+    const height = pixelAttr(tag, "height");
+    if (width) dims.push(width * 2);
+    if (height) dims.push(height * 2);
     if (!dims.length) continue;
     const cap = Math.max(...dims);
     caps.set(base, Math.max(caps.get(base) || 0, cap));

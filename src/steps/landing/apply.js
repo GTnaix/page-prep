@@ -15,8 +15,17 @@ const HEAD_END = "<!-- /analytics -->";
 const HEAD_BLOCK = /<!--\s*\/?analytics\s*-->[\s\S]*?<!--\s*\/analytics\s*-->/g;
 const HEAD_MARK = /<!--\s*\/?analytics\s*-->/g;
 
-function readSnippet(name) {
-  return fs.readFileSync(path.join(SNIPPETS, name), "utf8").trim();
+function readSnippet(tracker, name) {
+  const dir = tracker === "binom" ? SNIPPETS : path.join(SNIPPETS, tracker);
+  return fs.readFileSync(path.join(dir, name), "utf8").trim();
+}
+
+function stripAio(html) {
+  return html
+    .replace(/\{\{aio:head\}\}/g, "")
+    .replace(/\{\{aio:macros:number_link\}\}/g, "")
+    .replace(/\{\{aio:macros:form_loader\}\}/g, "")
+    .replace(/\{\{aio\}\}/g, "");
 }
 
 function stripLeadingPhp(html) {
@@ -59,29 +68,48 @@ function injectHead(html, analytics) {
   return `${html}\n${block}\n`;
 }
 
-export function apply(entry, google = false) {
+function applyAio(html) {
+  let next = stripAio(stripSpyAndOldAnalytics(html));
+  next = injectHead(next, readSnippet("aio", "head.html"));
+  return injectBody(next, readSnippet("aio", "body.html"));
+}
+
+function injectBody(html, block) {
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${block}\n</body>`);
+  }
+  return `${html}\n${block}\n`;
+}
+
+export function apply(entry, tracker = "binom", google = false) {
   let html = fs.readFileSync(entry, "utf8");
   html = stripLeadingPhp(html);
 
-  const suffix = google ? "-google" : "";
-  html = `${readSnippet(`boot${suffix}.php`)}\n\n${html.replace(/^\s+/, "")}`;
+  if (tracker === "aio") {
+    html = applyAio(html);
+    fs.writeFileSync(entry, html);
+    console.log("AIO macros placed");
+    return;
+  }
+
+  const suffix = tracker === "binom" && google ? "-google" : "";
+  html = `${readSnippet(tracker, `boot${suffix}.php`)}\n\n${html.replace(/^\s+/, "")}`;
 
   html = stripSpyAndOldAnalytics(html);
-  html = injectHead(html, readSnippet(`head${suffix}.html`));
+  html = injectHead(html, readSnippet(tracker, `head${suffix}.html`));
 
   fs.writeFileSync(entry, html);
-  console.log(
-    `PHP: bootstrap replaced, analytics replaced (${google ? "google" : "facebook"})`,
-  );
+  const direction = tracker === "keitaro" ? "keitaro" : google ? "google" : "facebook";
+  console.log(`PHP: bootstrap replaced, analytics replaced (${direction})`);
 }
 
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  const { entry, google } = resolveJob(
+  const { entry, google, tracker } = resolveJob(
     process.argv.slice(2),
-    "Usage: node src/steps/landing/apply.js work/<folder> [--google]",
+    "Usage: node src/steps/landing/apply.js work/<folder> [--google | --keitaro | --aio]",
   );
-  apply(entry, google);
+  apply(entry, tracker, google);
 }

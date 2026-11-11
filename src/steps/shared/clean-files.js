@@ -18,6 +18,16 @@ function isIconFile(file) {
   return name.endsWith(".ico") || name.startsWith("favicon");
 }
 
+function isExtraPage(file, entry) {
+  const ext = path.extname(file).toLowerCase();
+  if (ext !== ".html" && ext !== ".htm") return false;
+  const name = path.basename(file);
+  if (name.toLowerCase().endsWith(".bak")) return false;
+  if (/^index\.html?$/i.test(name)) return false;
+  if (path.resolve(file) === path.resolve(entry)) return false;
+  return true;
+}
+
 function alwaysKeep(pageDir, file) {
   const rel = posix(path.relative(pageDir, file)).toLowerCase();
   return (
@@ -195,8 +205,9 @@ export function cleanFiles(pageDir, entry) {
 
   for (const file of walkFiles(pageDir)) {
     const full = path.resolve(file);
-    if (referenced.has(full)) continue;
-    if (alwaysKeep(pageDir, full)) continue;
+    const extraPage = isExtraPage(full, entry);
+    if (!extraPage && referenced.has(full)) continue;
+    if (!extraPage && alwaysKeep(pageDir, full)) continue;
     if (isIconFile(full)) continue;
     if (path.basename(full).toLowerCase().endsWith(".bak")) continue;
     const rel = posix(path.relative(pageDir, full));

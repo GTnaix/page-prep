@@ -21,9 +21,9 @@ import { apply as applyOffer } from "../steps/offer/apply.js";
 import { ensureApp as ensureOfferApp } from "../steps/offer/ensure-app.js";
 import { disableForeignFormFile, normalizeFormFile } from "../steps/offer/form.js";
 
-let { pageDir, entry, cssFile, google, offer } = resolveJob(
+let { pageDir, entry, cssFile, google, offer, tracker } = resolveJob(
   process.argv.slice(2),
-  "Usage: npm run prep -- work/<folder> --landing [--google] | --offer [--google]",
+  "Usage: npm run prep -- work/<folder> --landing [--google | --keitaro | --aio] | --offer [--google | --keitaro | --aio]",
   { requirePage: true },
 );
 
@@ -45,14 +45,14 @@ await formatCss(pageDir, cssFile);
 cleanHtml(entry);
 imageAttrs(entry);
 if (offer) {
-  applyOffer(entry, google);
+  applyOffer(entry, tracker, google);
   ensureOfferApp(pageDir, entry);
 }
 else {
-  applyLanding(entry, google);
+  applyLanding(entry, tracker, google);
   ensureApp(pageDir, entry);
 }
 await formatHtml(entry);
-if (offer) normalizeFormFile(entry, google);
+if (offer && tracker !== "aio") normalizeFormFile(entry, tracker, google);
 else disableForeignFormFile(entry);
 backupHtml(entry);

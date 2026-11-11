@@ -64,6 +64,91 @@ function extractUsedSelectors(content) {
   return [...found];
 }
 
+const INDEX_ICON_BASE_CSS = `[class^="index-"]:before,
+[class*=" index-"]:before {
+  font-family: index-font, sans-serif !important;
+  speak: none;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+`;
+
+function pageUsesIndexIcons(html) {
+  return /\bclass\s*=\s*["'][^"']*\bindex-[\w-]*/.test(html);
+}
+
+function cssHasIndexIconBase(css) {
+  return /\[class\^=["']index-["']\][^{]*\{[^}]*font-family:\s*index-font/i.test(css);
+}
+
+const CONTAINER_BASE_CSS = `[class*="__container"] {
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 0.9375rem;
+  padding-right: 0.9375rem;
+}
+`;
+
+const POPUP_ACTIVE_CSS = `.popup_show {
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 150;
+}
+.popup_show .popup__content {
+  visibility: visible;
+  -webkit-transform: scale(1);
+  transform: scale(1);
+}
+html.popup-show body::after {
+  opacity: 1;
+  pointer-events: auto;
+}
+html.lock {
+  overflow: hidden;
+  touch-action: none;
+}
+html.lock body {
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: 100%;
+}
+`;
+
+function pageUsesContainers(html) {
+  return /\bclass\s*=\s*["'][^"']*__container\b/.test(html);
+}
+
+function cssHasContainerBase(css) {
+  return /\[class\*=["']__container["']\][^{]*\{[^}]*margin-left:\s*auto/i.test(css);
+}
+
+function pageUsesPopup(html) {
+  return /\bclass\s*=\s*["'][^"']*\bpopup\b/.test(html) || /\bid\s*=\s*["']popup["']/.test(html);
+}
+
+function cssHasPopupActive(css) {
+  return /\.popup_show\s*\{[^}]*visibility:\s*visible/i.test(css);
+}
+
+const LOADED_BODY_CSS = `html.loaded body {
+  opacity: 1;
+}
+`;
+
+function cssHidesBody(css) {
+  return /body[^{]*\{[^}]*opacity\s*:\s*0(?:\s*;|\s*\})/i.test(css);
+}
+
+function cssShowsLoadedBody(css) {
+  return /(?:html\s*)?\.loaded\s+body[^{]*\{[^}]*opacity\s*:\s*1/i.test(css);
+}
+
 export async function purgeCss(entry, cssFile) {
   if (!fs.existsSync(cssFile)) {
     fail(`No style.css in ${path.dirname(cssFile)}. Run merge-css first.`);
@@ -88,6 +173,10 @@ export async function purgeCss(entry, cssFile) {
       content: [{ raw: fs.readFileSync(entry, "utf8"), extension: "html" }],
       css: [{ raw: source }],
       defaultExtractor: extractUsedSelectors,
+      safelist: {
+        greedy: [/index-/, /__container/, /animate__/, /popup/],
+        standard: ["loaded", "loading", "popup_show", "popup-show", "lock"],
+      },
     });
   } catch (error) {
     if (source !== raw) fs.writeFileSync(cssFile, source);
@@ -97,7 +186,25 @@ export async function purgeCss(entry, cssFile) {
     console.log(`Purge skipped: ${detail}`);
     return;
   }
-  fs.writeFileSync(cssFile, purged.css);
+  let css = purged.css;
+  const html = fs.readFileSync(entry, "utf8");
+  if (pageUsesIndexIcons(html) && !cssHasIndexIconBase(css)) {
+    css = `${css.trimEnd()}\n\n${INDEX_ICON_BASE_CSS}`;
+    console.log("Index icon font restored");
+  }
+  if (pageUsesContainers(html) && !cssHasContainerBase(css)) {
+    css = `${css.trimEnd()}\n\n${CONTAINER_BASE_CSS}`;
+    console.log("Container layout restored");
+  }
+  if (pageUsesPopup(html) && !cssHasPopupActive(css)) {
+    css = `${css.trimEnd()}\n\n${POPUP_ACTIVE_CSS}`;
+    console.log("Popup styles restored");
+  }
+  if (cssHidesBody(css) && !cssShowsLoadedBody(css)) {
+    css = `${css.trimEnd()}\n\n${LOADED_BODY_CSS}`;
+    console.log("Loaded body reveal restored");
+  }
+  fs.writeFileSync(cssFile, css);
 
   const after = fs.statSync(cssFile).size;
   console.log(`Purged ${path.relative(ROOT, cssFile)}`);
