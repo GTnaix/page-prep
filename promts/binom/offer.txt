@@ -1,7 +1,7 @@
-Страна: GR
-Язык: el
+Страна: CA
+Язык: en
 CRM: RVG
-affiliate_id: 74
+affiliate_id: 1
 Направление: facebook
 Антифрод: да
 Номер: 001
