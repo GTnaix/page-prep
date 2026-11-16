@@ -63,7 +63,7 @@ npm run pack -- work/land
 | `npm run prep -- work/<папка> --offer` | Подготовка оффера или ленд-оффера. |
 | `npm run format -- work/<папка>` | Выравнивает HTML. Обычно запускает сам Cursor. |
 | `npm run to-html -- work/<папка>` | Возвращает `index.php` в `index.html` для просмотра. |
-| `npm run pack -- work/<папка>` | Собирает ZIP для загрузки на трекер. |
+| `npm run pack -- work/<папка> [--aio]` | Собирает ZIP. С `--aio` файл остаётся `index.html`, иначе становится `index.php`. |
 
 Трекер: Binom — без флага, Keitaro — `--keitaro`, AIO — `--aio`. Google — `--google` (только Binom).
 

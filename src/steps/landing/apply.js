@@ -16,8 +16,7 @@ const HEAD_BLOCK = /<!--\s*\/?analytics\s*-->[\s\S]*?<!--\s*\/analytics\s*-->/g;
 const HEAD_MARK = /<!--\s*\/?analytics\s*-->/g;
 
 function readSnippet(tracker, name) {
-  const dir = tracker === "binom" ? SNIPPETS : path.join(SNIPPETS, tracker);
-  return fs.readFileSync(path.join(dir, name), "utf8").trim();
+  return fs.readFileSync(path.join(SNIPPETS, tracker, name), "utf8").trim();
 }
 
 function stripAio(html) {

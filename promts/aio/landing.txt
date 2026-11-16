@@ -74,6 +74,7 @@ index.html.bak не править и не удалять.
   - Ссылку или кнопку «к содержанию» / skip / skip to content убрать.
   - Соц. мета (Open Graph, Twitter Card и т.п.) убрать.
     Оставить charset, viewport, title.
+    Текст title взять из h1.
     meta description есть — не трогать. Нет — не добавлять
     и не копировать из title.
   - Неиспользуемые модалки убрать. Любой <script> на странице —

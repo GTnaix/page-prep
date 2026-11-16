@@ -12,13 +12,13 @@ function removeBackups(pageDir) {
   }
 }
 
-function renameToPhp(entry) {
-  const ext = path.extname(entry).toLowerCase();
-  if (ext === ".php") {
+function renameEntry(entry, ext) {
+  const current = path.extname(entry).toLowerCase();
+  if (current === ext) {
     console.log(`Already ${path.basename(entry)}`);
     return entry;
   }
-  const dest = path.join(path.dirname(entry), `${path.basename(entry, ext)}.php`);
+  const dest = path.join(path.dirname(entry), `${path.basename(entry, current)}${ext}`);
   if (fs.existsSync(dest) && path.resolve(dest) !== path.resolve(entry)) {
     fs.rmSync(dest, { force: true });
   }
@@ -27,23 +27,23 @@ function renameToPhp(entry) {
   return dest;
 }
 
-export async function packPage(pageDir, entry) {
+export async function packPage(pageDir, entry, tracker) {
   assertInsideWork(pageDir);
   removeBackups(pageDir);
-  const phpFile = renameToPhp(entry);
+  const packed = renameEntry(entry, tracker === "aio" ? ".html" : ".php");
   const assetsDir = path.join(pageDir, "assets");
   if (!fs.existsSync(assetsDir)) fail("No assets/ folder");
 
   const zipPath = `${pageDir}.zip`;
   if (fs.existsSync(zipPath)) fs.rmSync(zipPath, { force: true });
-  await writeZip(zipPath, collectZipFiles(phpFile, assetsDir));
+  await writeZip(zipPath, collectZipFiles(packed, assetsDir));
   console.log(`Zip: ${path.relative(ROOT, zipPath)}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { pageDir, entry } = resolveJob(
+  const { pageDir, entry, tracker } = resolveJob(
     process.argv.slice(2),
-    "Usage: npm run pack -- work/<folder>",
+    "Usage: npm run pack -- work/<folder> [--aio]",
   );
-  packPage(pageDir, entry).catch((error) => fail(error.message || error));
+  packPage(pageDir, entry, tracker).catch((error) => fail(error.message || error));
 }

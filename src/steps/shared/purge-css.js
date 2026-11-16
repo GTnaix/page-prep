@@ -82,6 +82,34 @@ function pageUsesIndexIcons(html) {
   return /\bclass\s*=\s*["'][^"']*\bindex-[\w-]*/.test(html);
 }
 
+function pageUsesIconFont(html) {
+  return /\bclass\s*=\s*["'][^"']*\bicon-[\w-]*/.test(html);
+}
+
+function cssHasRaiIconFont(css) {
+  return /@font-face\s*\{[^}]*font-family:\s*["']?rai24["']?/i.test(css);
+}
+
+function iconFontBaseCss() {
+  return `[class^="icon-"]:before,
+[class*=" icon-"]:before {
+  font-family: rai24, sans-serif !important;
+  speak: none;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+`;
+}
+
+function cssHasIconFontBase(css) {
+  return /\[class\^=["']icon-["']\][^{]*\{[^}]*font-family:\s*["']?rai24["']?/i.test(css);
+}
+
 function cssHasIndexIconBase(css) {
   return /\[class\^=["']index-["']\][^{]*\{[^}]*font-family:\s*index-font/i.test(css);
 }
@@ -191,6 +219,10 @@ export async function purgeCss(entry, cssFile) {
   if (pageUsesIndexIcons(html) && !cssHasIndexIconBase(css)) {
     css = `${css.trimEnd()}\n\n${INDEX_ICON_BASE_CSS}`;
     console.log("Index icon font restored");
+  }
+  if (pageUsesIconFont(html) && cssHasRaiIconFont(css) && !cssHasIconFontBase(css)) {
+    css = `${css.trimEnd()}\n\n${iconFontBaseCss()}`;
+    console.log("Rai icon font restored");
   }
   if (pageUsesContainers(html) && !cssHasContainerBase(css)) {
     css = `${css.trimEnd()}\n\n${CONTAINER_BASE_CSS}`;

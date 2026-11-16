@@ -10,6 +10,7 @@ const SNIPPET = path.join(
   "..",
   "snippets",
   "landing",
+  "shared",
   "app.js",
 );
 
